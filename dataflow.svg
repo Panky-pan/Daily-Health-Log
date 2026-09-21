@@ -1,0 +1,112 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 580" font-family="Microsoft YaHei, PingFang SC, sans-serif">
+  <defs>
+    <marker id="ag" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#3E8E5F"/>
+    </marker>
+    <marker id="agy" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#8AA394"/>
+    </marker>
+    <marker id="aor" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#C77F3F"/>
+    </marker>
+    <marker id="abl" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#4A7A9B"/>
+    </marker>
+  </defs>
+
+  <!-- 背景：奶油色 -->
+  <rect x="0" y="0" width="880" height="580" fill="#FDF9F0"/>
+
+  <!-- 标题 -->
+  <text x="440" y="38" text-anchor="middle" font-size="20" font-weight="bold" fill="#2F4A3A">「每日健康打卡」数据流图</text>
+  <text x="440" y="60" text-anchor="middle" font-size="12" fill="#7A6F5C">数据从哪来、到哪去 —— 上半：MVP（现在）· 下半：二期（云端）</text>
+
+  <!-- ============ 上半：路线 A MVP ============ -->
+  <text x="30" y="92" font-size="15" font-weight="bold" fill="#3E8E5F">路线 A · MVP（现在）</text>
+  <text x="850" y="92" text-anchor="end" font-size="12" fill="#7A6F5C">数据只存你的浏览器，不上传任何服务器</text>
+
+  <!-- 第一行节点 -->
+  <rect x="30" y="108" width="115" height="58" rx="10" fill="#FFFFFF" stroke="#3E8E5F" stroke-width="2"/>
+  <text x="87" y="132" text-anchor="middle" font-size="14" font-weight="bold" fill="#2F4A3A">用户（你）</text>
+  <text x="87" y="152" text-anchor="middle" font-size="11" fill="#7A6F5C">填 1 分钟表单</text>
+
+  <rect x="190" y="108" width="175" height="58" rx="10" fill="#FFFFFF" stroke="#3E8E5F" stroke-width="2"/>
+  <text x="277" y="132" text-anchor="middle" font-size="14" font-weight="bold" fill="#2F4A3A">打卡表单</text>
+  <text x="277" y="152" text-anchor="middle" font-size="11" fill="#7A6F5C">index.html · today.js</text>
+
+  <rect x="410" y="108" width="195" height="58" rx="10" fill="#FFFFFF" stroke="#3E8E5F" stroke-width="2"/>
+  <text x="507" y="132" text-anchor="middle" font-size="14" font-weight="bold" fill="#2F4A3A">校验 + 卡路里估算</text>
+  <text x="507" y="152" text-anchor="middle" font-size="11" fill="#7A6F5C">validate.js · calories.js</text>
+
+  <rect x="650" y="103" width="200" height="68" rx="10" fill="#F5EEDD" stroke="#C4A870" stroke-width="2"/>
+  <text x="750" y="128" text-anchor="middle" font-size="13" font-weight="bold" fill="#5C4E32">localStorage 存储</text>
+  <text x="750" y="148" text-anchor="middle" font-size="11" fill="#7A6F5C">dhl:checkins · dhl:settings</text>
+  <text x="750" y="163" text-anchor="middle" font-size="10" fill="#9B8E70">storage.js 是唯一出入口</text>
+
+  <!-- 写入箭头 -->
+  <line x1="145" y1="137" x2="186" y2="137" stroke="#3E8E5F" stroke-width="2" marker-end="url(#ag)"/>
+  <line x1="365" y1="137" x2="406" y2="137" stroke="#3E8E5F" stroke-width="2" marker-end="url(#ag)"/>
+  <line x1="605" y1="137" x2="646" y2="137" stroke="#3E8E5F" stroke-width="2" marker-end="url(#ag)"/>
+  <text x="625" y="127" text-anchor="middle" font-size="11" fill="#3E8E5F">写入</text>
+
+  <!-- 读取分发线 -->
+  <path d="M750,171 V200 H190 V226" fill="none" stroke="#8AA394" stroke-width="2" marker-end="url(#agy)"/>
+  <line x1="440" y1="200" x2="440" y2="226" stroke="#8AA394" stroke-width="2" marker-end="url(#agy)"/>
+  <line x1="690" y1="200" x2="690" y2="226" stroke="#8AA394" stroke-width="2" marker-end="url(#agy)"/>
+  <text x="430" y="193" text-anchor="middle" font-size="11" fill="#7A6F5C">读取 · stats.js 计算 streak / 坚持率 / 周汇总</text>
+
+  <!-- 三个消费页面 -->
+  <rect x="100" y="230" width="180" height="62" rx="10" fill="#FFFFFF" stroke="#3E8E5F" stroke-width="2"/>
+  <text x="190" y="255" text-anchor="middle" font-size="14" font-weight="bold" fill="#2F4A3A">今日页</text>
+  <text x="190" y="275" text-anchor="middle" font-size="11" fill="#7A6F5C">streak 大字 · 提醒条 · 表单回显</text>
+
+  <rect x="350" y="230" width="180" height="62" rx="10" fill="#FFFFFF" stroke="#3E8E5F" stroke-width="2"/>
+  <text x="440" y="255" text-anchor="middle" font-size="14" font-weight="bold" fill="#2F4A3A">历史页</text>
+  <text x="440" y="275" text-anchor="middle" font-size="11" fill="#7A6F5C">日历 · 连续纪录 · 坚持率</text>
+
+  <rect x="600" y="230" width="180" height="62" rx="10" fill="#FFFFFF" stroke="#3E8E5F" stroke-width="2"/>
+  <text x="690" y="255" text-anchor="middle" font-size="14" font-weight="bold" fill="#2F4A3A">趋势页</text>
+  <text x="690" y="275" text-anchor="middle" font-size="11" fill="#7A6F5C">体重折线 · 周运动柱状</text>
+
+  <!-- 上下分隔线 -->
+  <line x1="30" y1="350" x2="850" y2="350" stroke="#DCCDB0" stroke-width="1.5" stroke-dasharray="6,4"/>
+
+  <!-- 迁移虚线（跨上半下半） -->
+  <line x1="800" y1="171" x2="800" y2="394" stroke="#C77F3F" stroke-width="2" stroke-dasharray="6,4" marker-end="url(#aor)"/>
+  <text x="792" y="310" text-anchor="end" font-size="11" fill="#C77F3F">二期迁移：导出 JSON</text>
+  <text x="792" y="326" text-anchor="end" font-size="11" fill="#C77F3F">→ 批量导入接口</text>
+
+  <!-- ============ 下半：路线 B 云端 ============ -->
+  <text x="30" y="378" font-size="15" font-weight="bold" fill="#4A7A9B">路线 B · 二期（云端同步）</text>
+  <text x="850" y="378" text-anchor="end" font-size="12" fill="#7A6F5C">数据进云数据库，换设备不丢；localStorage 始终留底</text>
+
+  <rect x="55" y="402" width="225" height="72" rx="10" fill="#FFFFFF" stroke="#4A7A9B" stroke-width="2"/>
+  <text x="167" y="428" text-anchor="middle" font-size="14" font-weight="bold" fill="#2E4A5E">React 页面（web/）</text>
+  <text x="167" y="447" text-anchor="middle" font-size="11" fill="#5E7285">api/ 模块统一发请求</text>
+  <text x="167" y="464" text-anchor="middle" font-size="11" fill="#5E7285">stats.js 前端算统计</text>
+
+  <rect x="345" y="402" width="230" height="72" rx="10" fill="#FFFFFF" stroke="#4A7A9B" stroke-width="2"/>
+  <text x="460" y="428" text-anchor="middle" font-size="14" font-weight="bold" fill="#2E4A5E">云函数（functions/api）</text>
+  <text x="460" y="447" text-anchor="middle" font-size="11" fill="#5E7285">JWT 鉴权 · 参数校验</text>
+  <text x="460" y="464" text-anchor="middle" font-size="11" fill="#5E7285">upsert 写入 / 查询</text>
+
+  <rect x="635" y="402" width="215" height="72" rx="10" fill="#EAF3F8" stroke="#4A7A9B" stroke-width="2"/>
+  <text x="742" y="428" text-anchor="middle" font-size="14" font-weight="bold" fill="#2E4A5E">PostgreSQL 云数据库</text>
+  <text x="742" y="447" text-anchor="middle" font-size="11" fill="#5E7285">checkins · settings · users</text>
+  <text x="742" y="464" text-anchor="middle" font-size="11" fill="#5E7285">一天一条 · CHECK 约束</text>
+
+  <!-- 双向箭头 -->
+  <line x1="282" y1="420" x2="341" y2="420" stroke="#3E8E5F" stroke-width="2" marker-end="url(#ag)"/>
+  <text x="311" y="412" text-anchor="middle" font-size="10.5" fill="#3E8E5F">请求</text>
+  <line x1="343" y1="452" x2="284" y2="452" stroke="#4A7A9B" stroke-width="2" marker-end="url(#abl)"/>
+  <text x="311" y="470" text-anchor="middle" font-size="10.5" fill="#4A7A9B">JSON</text>
+
+  <line x1="577" y1="420" x2="631" y2="420" stroke="#3E8E5F" stroke-width="2" marker-end="url(#ag)"/>
+  <text x="604" y="412" text-anchor="middle" font-size="10.5" fill="#3E8E5F">SQL</text>
+  <line x1="633" y1="452" x2="579" y2="452" stroke="#4A7A9B" stroke-width="2" marker-end="url(#abl)"/>
+  <text x="604" y="470" text-anchor="middle" font-size="10.5" fill="#4A7A9B">结果</text>
+
+  <!-- 底部一句话 -->
+  <text x="440" y="525" text-anchor="middle" font-size="13" fill="#2F4A3A">一句话：MVP 的数据从表单来 → 校验估算 → 存进 localStorage → 被三个页面读出去，全程不出浏览器；</text>
+  <text x="440" y="548" text-anchor="middle" font-size="13" fill="#2F4A3A">二期是同一个表单，只是存储换了地方：React 页面 → 云函数 → PostgreSQL，换设备也不丢。</text>
+</svg>

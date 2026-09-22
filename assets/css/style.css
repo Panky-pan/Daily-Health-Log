@@ -1,0 +1,460 @@
+/* ============================================
+   Daily-Health-Log 共用样式
+   原则：颜色只用下方 CSS 变量，全站三页统一
+   配色：奶油色底 + 绿色主色，圆角卡片 + 轻动效
+   ============================================ */
+
+:root {
+  /* ---- 颜色变量（全站唯一取色处） ---- */
+  --color-bg: #F7F2E4;          /* 奶油色页面底色 */
+  --color-card: #FDFBF3;        /* 卡片底色（比页面底色更亮） */
+  --color-green: #4C9A5F;       /* 主绿色（标题、强调） */
+  --color-green-light: #5BA85F; /* 亮绿（按钮、装饰） */
+  --color-green-pale: #E4EFDF;  /* 淡绿（选中态、标记底色） */
+  --color-text: #2F3B2F;        /* 正文深绿灰 */
+  --color-muted: #7A8471;       /* 次要文字 */
+  --color-yellow: #F2C14E;      /* 提醒条黄（后续步骤用） */
+  --color-danger: #D25B4A;      /* 表单红字提示 */
+  --color-border: #E8E0CC;      /* 卡片描边 */
+
+  /* ---- 尺寸变量 ---- */
+  --radius: 16px;       /* 卡片圆角 */
+  --radius-sm: 10px;    /* 按钮、小元素圆角 */
+  --shadow: 0 2px 10px rgba(47, 59, 47, 0.06);
+}
+
+/* ---- 基础重置 ---- */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+/* hidden 属性强制生效：防止自定义 display（如 .streak-card 的 flex）
+   盖过浏览器默认的 display:none，导致本该隐藏的卡片露出来 */
+[hidden] { display: none !important; }
+
+body {
+  font-family: "PingFang SC", "Microsoft YaHei", sans-serif;
+  background-color: var(--color-bg);
+  color: var(--color-text);
+  min-height: 100vh;
+  line-height: 1.6;
+}
+
+/* ---- 页面主容器：内容居中，宽度收敛 ---- */
+.container {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 24px 16px 48px;
+}
+
+/* ---- 顶部导航 ---- */
+.site-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 24px;
+}
+
+.site-title {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--color-green);
+}
+
+.site-nav {
+  display: flex;
+  gap: 8px;
+  background: var(--color-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 6px;
+  box-shadow: var(--shadow);
+}
+
+.site-nav a {
+  display: block;
+  padding: 8px 16px;
+  border-radius: var(--radius-sm);
+  text-decoration: none;
+  color: var(--color-muted);
+  font-size: 14px;
+  font-weight: 600;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.site-nav a:hover {
+  color: var(--color-green);
+  background-color: var(--color-green-pale);
+}
+
+/* 当前页高亮：HTML 里给当前页的链接加 class="active" */
+.site-nav a.active {
+  color: #fff;
+  background-color: var(--color-green-light);
+}
+
+/* ---- 卡片：内容区的基础容器 ---- */
+.card {
+  background: var(--color-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 24px;
+  margin-bottom: 16px;
+}
+
+.card-title {
+  font-size: 17px;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.card-hint {
+  font-size: 14px;
+  color: var(--color-muted);
+}
+
+/* ---- 表单基础（第 2 步起使用） ---- */
+.form-row {
+  margin: 16px 0;
+}
+
+.form-row label {
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.form-row input,
+.form-row select {
+  width: 100%;
+  max-width: 240px;
+  padding: 10px 12px;
+  font-size: 15px;
+  font-family: inherit;
+  color: var(--color-text);
+  background: #fff;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  outline: none;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.form-row input:focus,
+.form-row select:focus {
+  border-color: var(--color-green-light);
+  box-shadow: 0 0 0 3px var(--color-green-pale);
+}
+
+/* 文本框（三餐一句话）可以宽一点 */
+.form-row input[type="text"] {
+  max-width: 100%;
+}
+
+/* 运动类型 + 时长并排 */
+.inline-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.inline-row select,
+.inline-row input {
+  max-width: 160px;
+}
+
+/* ---- 三餐标签按钮：清爽 / 标准 / 丰盛（同组互斥单选） ---- */
+.tag-group {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.tag {
+  padding: 6px 16px;
+  font-size: 13px;
+  font-family: inherit;
+  color: var(--color-muted);
+  background: #fff;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+
+.tag:hover {
+  border-color: var(--color-green-light);
+  color: var(--color-green);
+}
+
+.tag.active {
+  color: var(--color-green);
+  font-weight: 700;
+  background: var(--color-green-pale);
+  border-color: var(--color-green-light);
+}
+
+/* 字段旁的红字提示（校验失败 / 保存失败） */
+.field-error {
+  font-size: 13px;
+  color: var(--color-danger);
+  margin-top: 4px;
+}
+
+/* ---- 按钮 ---- */
+.btn {
+  display: inline-block;
+  padding: 10px 22px;
+  font-size: 15px;
+  font-weight: 600;
+  font-family: inherit;
+  color: #fff;
+  background: var(--color-green-light);
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background-color 0.2s ease, transform 0.15s ease;
+}
+
+.btn:hover {
+  background: var(--color-green);
+}
+
+.btn:active {
+  transform: scale(0.97);
+}
+
+/* 次要按钮（如「改目标」）：透明底 + 绿描边 */
+.btn-ghost {
+  color: var(--color-green);
+  background: transparent;
+  border: 1px solid var(--color-green-light);
+}
+
+.btn-ghost:hover {
+  color: #fff;
+  background: var(--color-green-light);
+}
+
+/* ---- 已设目标展示文字 ---- */
+.goal-text {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--color-green);
+  margin-bottom: 14px;
+}
+
+/* ---- 打卡保存后的状态与卡路里结果 ---- */
+.checkin-status {
+  margin-top: 16px;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--color-green);
+}
+
+.calorie-note {
+  margin-top: 4px;
+  font-size: 14px;
+  color: var(--color-muted);
+}
+
+/* ---- streak 大字区：两个数字并排 ---- */
+.streak-card {
+  display: flex;
+  gap: 32px;
+  justify-content: center;
+  padding: 20px 24px;
+}
+
+.streak-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.streak-num {
+  font-size: 40px;
+  font-weight: 800;
+  line-height: 1.1;
+  color: var(--color-green);
+}
+
+.streak-label {
+  font-size: 13px;
+  color: var(--color-muted);
+}
+
+/* ---- 目标提醒条（F5）：黄 = 未达标，绿 = 达标 ---- */
+.reminder {
+  display: block;
+  padding: 12px 18px;
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 16px;
+  animation: card-in 0.35s ease both;
+}
+
+.reminder-warn {
+  background: #FBF1CE;
+  color: #8A6A1F;
+  border: 1px solid var(--color-yellow);
+}
+
+.reminder-ok {
+  background: var(--color-green-pale);
+  color: var(--color-green);
+  border: 1px solid var(--color-green-light);
+}
+
+/* ---- 历史页：统计卡三个数字并排 ---- */
+.stats-card {
+  display: flex;
+  gap: 32px;
+  justify-content: center;
+  padding: 20px 24px;
+}
+
+/* ---- 历史页：日历 ---- */
+.cal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.cal-nav {
+  padding: 6px 12px;
+  font-size: 13px;
+}
+
+.calendar-weekdays,
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+}
+
+.calendar-weekdays span {
+  text-align: center;
+  font-size: 12px;
+  color: var(--color-muted);
+  padding: 4px 0;
+}
+
+.cal-cell {
+  aspect-ratio: 1 / 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-family: inherit;
+  color: var(--color-text);
+  background: transparent;
+  border: none;
+  border-radius: 10px;
+}
+
+.cal-cell.checked {
+  background: var(--color-green-light);
+  color: #fff;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.cal-cell.checked:hover {
+  background: var(--color-green);
+}
+
+.cal-cell.today {
+  box-shadow: inset 0 0 0 2px var(--color-green);
+}
+
+.cal-cell.future {
+  color: #C9C2B0;
+}
+
+.cal-hint {
+  margin-top: 12px;
+  font-size: 13px;
+  color: var(--color-muted);
+}
+
+/* ---- 历史页：单日详情 ---- */
+.detail-line {
+  padding: 8px 0;
+  border-bottom: 1px dashed var(--color-border);
+  font-size: 14px;
+}
+
+.detail-line:last-child {
+  border-bottom: none;
+}
+
+.detail-label {
+  font-weight: 700;
+  color: var(--color-green);
+}
+
+/* ---- 趋势页：图表容器（Chart.js 需要固定高度的父容器） ---- */
+.chart-box {
+  position: relative;
+  height: 280px;
+}
+
+/* ---- 手机端基础自适应（PRD 5.2：不错位即可，不追求完美适配） ---- */
+@media (max-width: 480px) {
+  .site-header {
+    flex-direction: column;
+    align-items: stretch;
+    text-align: center;
+  }
+
+  .site-nav {
+    justify-content: center;
+  }
+
+  .streak-card,
+  .stats-card {
+    gap: 20px;
+  }
+
+  .streak-num {
+    font-size: 32px;
+  }
+
+  /* 手机上输入框占满整行，别挤在半边 */
+  .form-row input,
+  .form-row select,
+  .inline-row select,
+  .inline-row input {
+    max-width: 100%;
+  }
+
+  .inline-row input {
+    flex: 1;
+  }
+}
+
+/* ---- 页脚提示 ---- */
+.page-footer {
+  text-align: center;
+  font-size: 13px;
+  color: var(--color-muted);
+  margin-top: 32px;
+}
+
+/* ---- 轻动效：卡片淡入（尊重系统减动效设置） ---- */
+@media (prefers-reduced-motion: no-preference) {
+  .card {
+    animation: card-in 0.35s ease both;
+  }
+  @keyframes card-in {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+}

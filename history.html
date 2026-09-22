@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>历史记录 · Daily-Health-Log</title>
+<link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+
+<div class="container">
+
+  <!-- 顶部导航：三页共用结构，当前页链接加 class="active" -->
+  <header class="site-header">
+    <div class="site-title">每日健康打卡</div>
+    <nav class="site-nav">
+      <a href="index.html">今日打卡</a>
+      <a href="history.html" class="active">历史记录</a>
+      <a href="trends.html">趋势</a>
+    </nav>
+  </header>
+
+  <main>
+    <!-- 统计卡（PRD F3）：当前连续 / 历史最长 / 坚持率，口径在 stats.js -->
+    <section class="card stats-card">
+      <div class="streak-item">
+        <span class="streak-num" id="stat-streak">0</span>
+        <span class="streak-label">当前连续（天）</span>
+      </div>
+      <div class="streak-item">
+        <span class="streak-num" id="stat-longest">0</span>
+        <span class="streak-label">历史最长（天）</span>
+      </div>
+      <div class="streak-item">
+        <span class="streak-num" id="stat-rate">—</span>
+        <span class="streak-label">坚持率</span>
+      </div>
+    </section>
+
+    <!-- 打卡日历（PRD F3 / E8）：可切换上/下月，未来日期不可点 -->
+    <section class="card">
+      <div class="cal-header">
+        <button type="button" class="btn btn-ghost cal-nav" id="btn-prev-month">← 上个月</button>
+        <h2 class="card-title" id="cal-title"></h2>
+        <button type="button" class="btn btn-ghost cal-nav" id="btn-next-month">下个月 →</button>
+      </div>
+      <div class="calendar-weekdays">
+        <span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span>
+      </div>
+      <div class="calendar-grid" id="calendar-grid"></div>
+      <p class="cal-hint" id="cal-hint">绿色是打了卡的日子，点一下能看当天详情；还没到的那天点不了。</p>
+    </section>
+
+    <!-- 单日详情：点日历上有标记的日子出现（PRD F3 / 验收 A7） -->
+    <section class="card" id="detail-card" hidden>
+      <h2 class="card-title" id="detail-title"></h2>
+      <div id="detail-body"></div>
+    </section>
+  </main>
+
+  <footer class="page-footer">数据只存在你自己的浏览器里，放心用。</footer>
+
+</div>
+
+<script src="assets/js/storage.js"></script>
+<script src="assets/js/stats.js"></script>
+<script src="assets/js/history.js"></script>
+
+</body>
+</html>

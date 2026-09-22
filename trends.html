@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>趋势 · Daily-Health-Log</title>
+<link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+
+<div class="container">
+
+  <!-- 顶部导航：三页共用结构，当前页链接加 class="active" -->
+  <header class="site-header">
+    <div class="site-title">每日健康打卡</div>
+    <nav class="site-nav">
+      <a href="index.html">今日打卡</a>
+      <a href="history.html">历史记录</a>
+      <a href="trends.html" class="active">趋势</a>
+    </nav>
+  </header>
+
+  <main>
+    <!-- 体重折线图（PRD F4 / E4：少于 2 个点不画空图，显示引导文案） -->
+    <section class="card">
+      <h2 class="card-title">体重趋势</h2>
+      <div class="chart-box" id="weight-box">
+        <canvas id="weight-chart"></canvas>
+      </div>
+      <p class="card-hint" id="weight-empty" hidden>记录太少，先去打卡几次吧。</p>
+    </section>
+
+    <!-- 每周运动时长柱状图（PRD F4 / E4：一条运动记录都没有时显示引导文案） -->
+    <section class="card">
+      <h2 class="card-title">每周运动时长</h2>
+      <div class="chart-box" id="exercise-box">
+        <canvas id="exercise-chart"></canvas>
+      </div>
+      <p class="card-hint" id="exercise-empty" hidden>还没有运动记录，先去打卡几次吧。</p>
+    </section>
+  </main>
+
+  <footer class="page-footer">数据只存在你自己的浏览器里，放心用。</footer>
+
+</div>
+
+<script src="assets/js/storage.js"></script>
+<script src="assets/js/stats.js"></script>
+<script src="assets/js/vendor/chart.umd.js"></script>
+<script src="assets/js/trends.js"></script>
+
+</body>
+</html>

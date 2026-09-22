@@ -1,6 +1,6 @@
 # TECH_DESIGN ·「每日健康打卡」(Daily-Health-Log)
 
-> 版本：v1.0　撰写日期：2026-09-21
+> 版本：v1.2　撰写日期：2026-09-21　最近更新：2026-09-22
 > 依据文档：PRD.md v1.1（2026-09-21）、research.md（2026-09-19）
 > 读者：零基础开发者（Panky）本人，以及未来任何想接手这个项目的人
 >
@@ -16,6 +16,7 @@
 > |---|---|---|
 > | v1.0 | 2026-09-21 | 初稿：方案对比、推荐路线、双路线技术设计 |
 > | v1.1 | 2026-09-21 | 新增 3.0 施工顺序（Panky 拍板）；2.3 节新增数据流图（源文件 dataflow.svg，文档引用 dataflow.png，Day 5 主任务） |
+> | v1.2 | 2026-09-22 | 2.1 项目结构目录口径统一为 `assets/css/`、`assets/js/`、`assets/img/`（与 AGENTS.md 第 8 节目录约定对齐，附录五表格同步）；2.1 文件清单补全（README.md、AGENTS.md、.gitignore、dataflow.svg/png）；2.1 结构图中 index.html 的重复表述改为文末说明；同步修正文档头版本号（此前正文记为 v1.0、修订表已到 v1.1，属记录遗漏） |
 
 ---
 
@@ -103,8 +104,11 @@ Daily-Health-Log/
 │   │   └── trends.js       # 趋势页逻辑
 │   └── img/                # 图片素材
 ├── PRD.md / TECH_DESIGN.md / research.md
-└── index.html 占位页（Day 2 已提交，将被上述结构替换）
+├── README.md / AGENTS.md / .gitignore
+└── dataflow.svg / dataflow.png    # 数据流图（.svg 为源文件，Markdown 引用 .png）
 ```
+
+> 说明：现有 `index.html` 是 Day 2 提交的占位首页，将在开发日被上述「今日打卡页」重写替换。
 
 **为什么是三个 HTML 文件而不是单页应用？** PRD 5.2 允许二选一。三个文件没有路由概念、每页一个 JS 文件各管各的，对零基础最好排查；数据共享靠 localStorage 天然实现。代价是公共代码要抽到 storage.js / stats.js 里避免复制粘贴——这条作为开发纪律执行。
 

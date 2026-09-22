@@ -88,18 +88,20 @@ Daily-Health-Log/
 ├── index.html              # ① 今日打卡页（默认首页，含首次设置引导 F1）
 ├── history.html            # ② 历史记录页（日历 + streak + 坚持率 + 单日详情）
 ├── trends.html             # ③ 趋势页（体重折线 + 周运动柱状）
-├── css/
-│   └── style.css           # 共用样式：奶油色底 + 绿色主色、圆角卡片、轻动效
-├── js/
-│   ├── storage.js          # localStorage 读写封装（全项目唯一出入口，含 try/catch）
-│   ├── calories.js         # 卡路里内置换算表（PRD 6.3）+ 估算函数
-│   ├── validate.js         # 字段校验规则（对应 E5/B2）
-│   ├── stats.js            # streak / 坚持率 / 每周运动汇总（纯计算，不碰 DOM）
-│   ├── vendor/
-│   │   └── chart.umd.js    # Chart.js 本地文件（不用 CDN，离线也能打开）
-│   ├── today.js            # 今日页逻辑
-│   ├── history.js          # 历史页逻辑
-│   └── trends.js           # 趋势页逻辑
+├── assets/
+│   ├── css/
+│   │   └── style.css       # 共用样式：奶油色底 + 绿色主色、圆角卡片、轻动效
+│   ├── js/
+│   │   ├── storage.js      # localStorage 读写封装（全项目唯一出入口，含 try/catch）
+│   │   ├── calories.js     # 卡路里内置换算表（PRD 6.3）+ 估算函数
+│   │   ├── validate.js     # 字段校验规则（对应 E5/B2）
+│   │   ├── stats.js        # streak / 坚持率 / 每周运动汇总（纯计算，不碰 DOM）
+│   │   ├── vendor/
+│   │   │   └── chart.umd.js  # Chart.js 本地文件（不用 CDN，离线也能打开）
+│   │   ├── today.js        # 今日页逻辑
+│   │   ├── history.js      # 历史页逻辑
+│   │   └── trends.js       # 趋势页逻辑
+│   └── img/                # 图片素材
 ├── PRD.md / TECH_DESIGN.md / research.md
 └── index.html 占位页（Day 2 已提交，将被上述结构替换）
 ```
@@ -376,7 +378,7 @@ CREATE TABLE settings (
 | 改卡路里换算表（如慢跑 10→11 大卡/分钟） | `calories.js`（唯一） | PRD 6.3、验收 A10 | 不碰任何页面代码 |
 | 改统计口径（如坚持率分母含当天） | `stats.js`（唯一） | PRD F3、TECH_DESIGN 2.3 | 口径改动务必更新 PRD，文档是验收依据 |
 | 加/减记录字段（如增加「加餐」） | `storage.js`（存取）、`validate.js`（校验）、`today.js`（表单）、`history.js`（详情展示） | PRD 6.1、TECH_DESIGN 2.2/3.2、`dataflow.svg`（如有新环节） | `dhl:meta` 的 schemaVersion +1，写迁移逻辑兼容旧数据 |
-| 改配色/视觉风格 | `css/style.css`（唯一） | PRD 5.2 第 4 条（如偏差大） | 三页共用一份样式，天然一致 |
+| 改配色/视觉风格 | `assets/css/style.css`（唯一） | PRD 5.2 第 4 条（如偏差大） | 三页共用一份样式，天然一致 |
 | MVP → 云端（路线 A 切路线 B） | 新建 `web/`、`functions/`；`storage.js` 职责由 `web/src/api/` 接管；**stats/calories/validate 原样拷贝复用** | TECH_DESIGN 第三节整体生效、PRD 1.2 修订 | 按 3.0 施工顺序推进；迁移按 3.7 九条纪律 |
 | 换云厂商（CloudBase → 其他） | `functions/api/index.js` 入口外壳、`db.js` 连接配置、环境变量 | TECH_DESIGN 3.6 | routes 里的业务纯函数不动——平台无关设计就是为这一天 |
 | 新增页面（如周报复盘页） | 新 HTML + 新 `weekly.js`；复用 `storage.js`/`stats.js` | PRD 加功能节、TECH_DESIGN 2.1 结构图 | 不动已有三页 |

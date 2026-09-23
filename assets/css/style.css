@@ -16,6 +16,7 @@
   --color-yellow: #F2C14E;      /* 提醒条黄（后续步骤用） */
   --color-danger: #D25B4A;      /* 表单红字提示 */
   --color-border: #E8E0CC;      /* 卡片描边 */
+  --color-skeleton: #EDE6D6;    /* 加载中骨架屏灰块（开屏页用） */
 
   /* ---- 尺寸变量 ---- */
   --radius: 16px;       /* 卡片圆角 */
@@ -406,6 +407,231 @@ body {
   height: 280px;
 }
 
+/* ============================================
+   开屏页（welcome.html）专用样式
+   ============================================ */
+
+/* ---- hero 区：一句话 + 主按钮 ---- */
+.hero {
+  text-align: center;
+  padding: 40px 24px 36px;
+  background: var(--color-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  margin-bottom: 16px;
+}
+
+.hero-title {
+  font-size: 30px;
+  font-weight: 800;
+  line-height: 1.3;
+  color: var(--color-green);
+}
+
+.hero-sub {
+  margin-top: 10px;
+  font-size: 15px;
+  color: var(--color-muted);
+}
+
+/* 主按钮：比普通按钮大一圈、更圆，是全页最显眼的可点元素 */
+.btn-hero {
+  margin-top: 22px;
+  padding: 14px 34px;
+  font-size: 17px;
+  border-radius: 999px;
+}
+
+.hero-note {
+  margin-top: 12px;
+  font-size: 13px;
+  color: var(--color-muted);
+}
+
+/* ---- 预览区标题 ---- */
+.preview-title {
+  font-size: 17px;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.preview-hint {
+  font-size: 13px;
+  color: var(--color-muted);
+  margin-bottom: 14px;
+}
+
+/* ---- 空 / 出错：两种状态共用一块居中卡片 ---- */
+.state-box {
+  text-align: center;
+  padding: 32px 24px;
+  background: var(--color-card);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius);
+}
+
+.state-box-error {
+  border-color: var(--color-danger);
+}
+
+.state-title {
+  font-size: 16px;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.state-desc {
+  font-size: 14px;
+  color: var(--color-muted);
+  margin-bottom: 16px;
+}
+
+/* ---- 加载中：骨架屏（灰块 + 呼吸动画） ----
+   骨架屏的块数与排布，故意和「有数据」时的四张卡片对齐：
+   这样加载完切换时画面不会跳动，也让人一眼看出「这里马上会出现 4 张卡」 */
+.skeleton-cards {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.skeleton-card,
+.skeleton-line {
+  background: var(--color-skeleton);
+  border-radius: var(--radius-sm);
+}
+
+.skeleton-card {
+  height: 88px;
+}
+
+.skeleton-line {
+  height: 16px;
+  margin-bottom: 10px;
+}
+
+.skeleton-line-short {
+  width: 60%;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .skeleton-card,
+  .skeleton-line {
+    animation: skeleton-breath 1.4s ease-in-out infinite;
+  }
+  @keyframes skeleton-breath {
+    0%, 100% { opacity: 1; }
+    50%      { opacity: 0.5; }
+  }
+}
+
+/* ---- 有数据：今日概览四张卡片 ---- */
+.preview-cards {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.preview-card {
+  background: var(--color-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 16px 14px;
+}
+
+.preview-card-label {
+  font-size: 13px;
+  color: var(--color-muted);
+  margin-bottom: 6px;
+}
+
+.preview-card-value {
+  font-size: 24px;
+  font-weight: 800;
+  line-height: 1.2;
+  color: var(--color-green);
+}
+
+.preview-card-unit {
+  font-size: 13px;
+  font-weight: 600;
+  margin-left: 4px;
+}
+
+.preview-card-note {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--color-muted);
+}
+
+/* ---- 有数据：最近几天记录列表 ---- */
+.record-list {
+  list-style: none;
+  background: var(--color-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 4px 18px;
+}
+
+.record-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 0;
+  border-bottom: 1px dashed var(--color-border);
+}
+
+.record-row:last-child {
+  border-bottom: none;
+}
+
+.record-date {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 52px;
+}
+
+.record-md {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.record-wd {
+  font-size: 12px;
+  color: var(--color-muted);
+}
+
+.record-body {
+  flex: 1;
+  min-width: 0;   /* 关键：允许内部文字换行，不被长内容顶破整行 */
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.record-exercise {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.record-meta {
+  font-size: 12px;
+  color: var(--color-muted);
+}
+
+.record-weight {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--color-green);
+  white-space: nowrap;
+}
+
 /* ---- 手机端基础自适应（PRD 5.2：不错位即可，不追求完美适配） ---- */
 @media (max-width: 480px) {
   .site-header {
@@ -414,8 +640,15 @@ body {
     text-align: center;
   }
 
+  /* 导航变四项后，窄屏必须允许换行并收紧内边距，否则会横向溢出 */
   .site-nav {
     justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  .site-nav a {
+    padding: 8px 12px;
+    font-size: 13px;
   }
 
   .streak-card,
@@ -437,6 +670,45 @@ body {
 
   .inline-row input {
     flex: 1;
+  }
+
+  /* 开屏页：小屏收紧标题和内边距，主按钮别撑破 */
+  .hero {
+    padding: 28px 18px 26px;
+  }
+
+  .hero-title {
+    font-size: 24px;
+  }
+
+  .btn-hero {
+    padding: 13px 28px;
+    font-size: 16px;
+  }
+
+  .skeleton-cards {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  /* 四张卡片在手机上排两列；列表行收紧一点间距，别太挤 */
+  .preview-cards {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .preview-card {
+    padding: 14px 12px;
+  }
+
+  .preview-card-value {
+    font-size: 20px;
+  }
+
+  .record-list {
+    padding: 4px 14px;
+  }
+
+  .record-row {
+    gap: 10px;
   }
 }
 

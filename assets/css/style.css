@@ -12,7 +12,7 @@
   --color-green-light: #5BA85F; /* 亮绿（按钮、装饰） */
   --color-green-pale: #E4EFDF;  /* 淡绿（选中态、标记底色） */
   --color-text: #2F3B2F;        /* 正文深绿灰 */
-  --color-muted: #7A8471;       /* 次要文字 */
+  --color-muted: #5C6654;       /* 次要文字（加深后对比度约 5.8:1，达 WCAG AA） */
   --color-yellow: #F2C14E;      /* 提醒条黄（后续步骤用） */
   --color-danger: #D25B4A;      /* 表单红字提示 */
   --color-border: #E8E0CC;      /* 卡片描边 */
@@ -105,9 +105,9 @@ body {
 }
 
 .card-title {
-  font-size: 17px;
+  font-size: 18px;
   font-weight: 700;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
 }
 
 .card-hint {
@@ -238,6 +238,17 @@ body {
   background: var(--color-green-light);
 }
 
+/* ---- 键盘焦点可见性（Day 9 审查问题 2）----
+   :focus-visible 只在键盘 Tab 导航时显示光环，鼠标点击不出现、外观不受影响。
+   覆盖全站可点元素：导航链接 / 按钮 / 三餐标签 / 日历已打卡格子 */
+.site-nav a:focus-visible,
+.btn:focus-visible,
+.tag:focus-visible,
+.cal-cell.checked:focus-visible {
+  outline: 2px solid var(--color-green-light);
+  outline-offset: 2px;
+}
+
 /* ---- 已设目标展示文字 ---- */
 .goal-text {
   font-size: 16px;
@@ -265,7 +276,7 @@ body {
   display: flex;
   gap: 32px;
   justify-content: center;
-  padding: 20px 24px;
+  padding: 24px;   /* Day 9 审查问题 5：与其他卡片统一为 24px */
 }
 
 .streak-item {
@@ -315,7 +326,7 @@ body {
   display: flex;
   gap: 32px;
   justify-content: center;
-  padding: 20px 24px;
+  padding: 24px;   /* Day 9 审查问题 5：与其他卡片统一为 24px */
 }
 
 /* ---- 历史页：日历 ---- */
@@ -575,7 +586,7 @@ body {
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
-  padding: 4px 18px;
+  padding: 8px 18px;   /* Day 9 审查问题 5：上下提到 8px，首尾行不再贴边 */
 }
 
 .record-row {
@@ -647,8 +658,18 @@ body {
   }
 
   .site-nav a {
-    padding: 8px 12px;
+    padding: 12px 14px;
     font-size: 13px;
+  }
+
+  /* Day 9 审查问题 3：手机上可点元素加高到约 44px（触控目标最低标准），
+     桌面端尺寸不变。覆盖：导航链接 / 三餐标签 / 日历月份切换按钮 */
+  .tag {
+    padding: 12px 18px;
+  }
+
+  .cal-nav {
+    padding: 12px 14px;
   }
 
   .streak-card,

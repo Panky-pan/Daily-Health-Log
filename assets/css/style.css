@@ -206,6 +206,7 @@ body {
 /* ---- 按钮 ---- */
 .btn {
   display: inline-block;
+  text-decoration: none;   /* Day 10：按钮常用 <a> 实现，去掉浏览器默认下划线 */
   padding: 10px 22px;
   font-size: 15px;
   font-weight: 600;
@@ -705,6 +706,19 @@ body {
   .btn-hero {
     padding: 13px 28px;
     font-size: 16px;
+  }
+
+  /* Day 10：手机端小字号统一提一档，避免 12/13/15px 混排显得忽大忽小。
+     桌面端字号完全不变；导航链接保持 13px，防止四项在 360px 下溢出换行 */
+  .hero-note,
+  .preview-hint {
+    font-size: 14px;
+  }
+
+  .preview-card-note,
+  .record-wd,
+  .record-meta {
+    font-size: 13px;
   }
 
   .skeleton-cards {

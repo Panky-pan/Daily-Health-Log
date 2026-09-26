@@ -462,15 +462,10 @@ body {
 }
 
 /* ---- Day 10：纯开屏布局 ----
-   无导航、无预览区：品牌名贴顶、页脚贴底，hero 垂直居中占满一屏 */
+   无导航、无预览区：品牌名 + 标题 + 插画 + 按钮作为一组垂直居中，
+   内容变高后上下空档自然收紧，不再有大片留白 */
 .container-splash {
   min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-}
-
-.container-splash main {
-  flex: 1;
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -483,8 +478,27 @@ body {
   text-align: center;
 }
 
+/* 拆框：开屏页不用 hero 大卡片，文字直接排在页面底色上 */
 .splash-hero {
+  background: none;
+  border: none;
+  box-shadow: none;
+  padding: 0;
   margin-bottom: 0;
+}
+
+/* 插画：标题之下、副标题之上，居中 + 圆角 */
+.splash-figure {
+  display: block;
+  width: 200px;
+  height: auto;
+  margin: 18px auto 16px;
+  border-radius: var(--radius);
+}
+
+/* 开屏页页脚随内容组排布，贴得比普通页近一点 */
+.container-splash .page-footer {
+  margin-top: 28px;
 }
 
 /* ---- 预览区标题 ---- */
@@ -745,6 +759,11 @@ body {
   .record-wd,
   .record-meta {
     font-size: 13px;
+  }
+
+  /* 开屏页插画小屏收窄，别撑破 360px */
+  .splash-figure {
+    width: 160px;
   }
 
   .skeleton-cards {

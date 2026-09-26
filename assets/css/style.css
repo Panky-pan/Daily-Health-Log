@@ -461,44 +461,78 @@ body {
   color: var(--color-muted);
 }
 
-/* ---- Day 10：纯开屏布局 ----
-   无导航、无预览区：品牌名 + 标题 + 插画 + 按钮作为一组垂直居中，
-   内容变高后上下空档自然收紧，不再有大片留白 */
-.container-splash {
+/* ---- Day 10：纯开屏布局（上下两段式）----
+   上段奶油底放品牌名 + 插画，插画下缘压过交界线；
+   下段淡绿色块铺满剩余屏幕，标题/按钮/小字排在色块内 */
+.splash {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
-  justify-content: center;
+}
+
+.splash-top {
+  text-align: center;
+  padding: 28px 24px 0;
 }
 
 .splash-brand {
   font-size: 20px;
   font-weight: 800;
   color: var(--color-green);
-  text-align: center;
 }
 
-/* 拆框：开屏页不用 hero 大卡片，文字直接排在页面底色上 */
-.splash-hero {
-  background: none;
-  border: none;
-  box-shadow: none;
-  padding: 0;
-  margin-bottom: 0;
-}
-
-/* 插画：标题之下、副标题之上，居中 + 圆角 */
 .splash-figure {
   display: block;
-  width: 200px;
+  width: min(64vw, 260px);
   height: auto;
-  margin: 18px auto 16px;
+  margin: 16px auto -42px;   /* 负下边距：插画压过色块交界，制造层次 */
+  position: relative;
+  z-index: 1;
   border-radius: var(--radius);
+  box-shadow: var(--shadow);
 }
 
-/* 开屏页页脚随内容组排布，贴得比普通页近一点 */
-.container-splash .page-footer {
-  margin-top: 28px;
+.splash-band {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-green-pale);
+  text-align: center;
+  padding: 58px 24px 20px;
+}
+
+/* 标题深色为主、关键词点缀绿色：不再是全绿或全黑 */
+.splash-title {
+  font-size: 30px;
+  font-weight: 800;
+  line-height: 1.3;
+  color: var(--color-text);
+}
+
+.splash-title .accent {
+  color: var(--color-green);
+}
+
+.splash-band .hero-sub {
+  margin-top: 10px;
+  font-size: 15px;
+  color: var(--color-muted);
+}
+
+.splash-band .btn-hero {
+  align-self: center;
+  margin-top: 22px;
+}
+
+.splash-band .hero-note {
+  margin-top: 12px;
+  font-size: 13px;
+  color: var(--color-muted);
+}
+
+.splash-band .page-footer {
+  margin-top: auto;   /* 页脚贴住色块底部 */
+  padding-top: 24px;
 }
 
 /* ---- 预览区标题 ---- */
@@ -761,9 +795,9 @@ body {
     font-size: 13px;
   }
 
-  /* 开屏页插画小屏收窄，别撑破 360px */
-  .splash-figure {
-    width: 160px;
+  /* 开屏页：小屏收紧标题字号（插画宽度用 vw 公式自适应，无需另调） */
+  .splash-title {
+    font-size: 24px;
   }
 
   .skeleton-cards {

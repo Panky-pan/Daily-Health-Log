@@ -488,8 +488,9 @@ body {
   margin: 16px auto -42px;   /* 负下边距：插画压过色块交界，制造层次 */
   position: relative;
   z-index: 1;
-  border-radius: var(--radius);
-  box-shadow: var(--shadow);
+  /* 白底已抠成透明：用跟随轮廓的 drop-shadow 代替方形 box-shadow，
+     否则会透出一个矩形的"影子框" */
+  filter: drop-shadow(0 4px 12px rgba(47, 59, 47, 0.18));
 }
 
 .splash-band {

@@ -8,80 +8,25 @@
 </head>
 <body>
 
-<div class="container">
+<div class="container container-splash">
 
-  <!-- 顶部导航：四页共用结构，当前页链接加 class="active" -->
-  <header class="site-header">
-    <div class="site-title">每日健康打卡</div>
-    <nav class="site-nav">
-      <a href="welcome.html" class="active">首页</a>
-      <a href="index.html">今日打卡</a>
-      <a href="history.html">历史记录</a>
-      <a href="trends.html">趋势</a>
-    </nav>
-  </header>
+  <!-- 开屏页只放品牌名，不放导航：点「开启我的健康记录」进入应用后，
+       各页面自带导航栏，照样能去今日打卡 / 历史记录 / 趋势，也能回这里 -->
+  <header class="splash-brand">每日健康打卡</header>
 
   <main>
-    <!-- ============ hero 区：一句话 + 主按钮 ============ -->
-    <section class="hero">
+    <!-- ============ hero 区：整屏垂直居中的门面 ============ -->
+    <section class="hero splash-hero">
       <h1 class="hero-title">身体是革命的本钱</h1>
       <p class="hero-sub">每天花一分钟，记下运动、饮食、体重和喝水。坚持这件事，让它自己看得见。</p>
       <a class="btn btn-hero" href="index.html">开启我的健康记录</a>
       <p class="hero-note">不用注册、不用登录，记完就存在你自己的浏览器里。</p>
-    </section>
-
-    <!-- ============ 预览区 ============
-         第 3 板块用本地假数据把卡片和列表渲染进 #preview-cards / #preview-list；
-         四个状态容器已经就位，第 3 板块用 JS 按状态切换 hidden：
-         loading（加载中·骨架屏）/ data（有数据）/ empty（空）/ error（出错） -->
-    <section class="preview">
-      <h2 class="preview-title">记录长这样</h2>
-      <p class="preview-hint">下面是示例内容，等你打过卡，这里就换成你自己的记录。</p>
-
-      <!-- 状态一：加载中（骨架屏）。现在默认显示，方便先看清版式 -->
-      <div class="state-loading" id="preview-loading">
-        <div class="skeleton-cards">
-          <div class="skeleton-card"></div>
-          <div class="skeleton-card"></div>
-          <div class="skeleton-card"></div>
-          <div class="skeleton-card"></div>
-        </div>
-        <div class="skeleton-line"></div>
-        <div class="skeleton-line skeleton-line-short"></div>
-        <div class="skeleton-line"></div>
-      </div>
-
-      <!-- 状态二：有数据（概览卡片 + 最近记录列表）。内容由第 3 板块的 JS 填入 -->
-      <div id="preview-data" hidden>
-        <div class="preview-cards" id="preview-cards"></div>
-        <ul class="record-list" id="preview-list"></ul>
-      </div>
-
-      <!-- 状态三：空——一条记录都还没有时 -->
-      <div class="state-box" id="preview-empty" hidden>
-        <p class="state-title">还没记过任何一天</p>
-        <p class="state-desc">今天先打第一次卡吧，这里很快就会热闹起来。</p>
-        <a class="btn btn-ghost" href="index.html">去打今天的卡</a>
-      </div>
-
-      <!-- 状态四：出错——数据没取到时（重试按钮在第 3 板块接上逻辑） -->
-      <div class="state-box state-box-error" id="preview-error" hidden>
-        <p class="state-title">记录没加载出来</p>
-        <p class="state-desc">可能是页面抽了下风，点下面重新试一次。</p>
-        <button type="button" class="btn btn-ghost" id="preview-retry">重新加载</button>
-      </div>
     </section>
   </main>
 
   <footer class="page-footer">数据只存在你自己的浏览器里，放心用。</footer>
 
 </div>
-
-<!-- 顺序有讲究：mock.js 会用到 calories.js 的换算表，所以排在它后面；
-     landing.js 又要用 mock.js 的取数函数，放最后 -->
-<script src="assets/js/calories.js"></script>
-<script src="assets/js/mock.js"></script>
-<script src="assets/js/landing.js"></script>
 
 </body>
 </html>

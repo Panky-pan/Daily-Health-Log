@@ -162,5 +162,82 @@
     renderCalendar();
   });
 
+  /* ---- Day 12：按饮食标签筛选（frontend-guidelines skill 实战） ----
+     数据只读不写：扫全部打卡记录的三餐 Tag，不碰 localStorage 写接口 */
+
+  var filterGroup = document.getElementById('meal-tag-filter');
+  var filterResult = document.getElementById('filter-result');
+
+  var MEALS = [
+    { label: '早餐', tagKey: 'mealBreakfastTag', textKey: 'mealBreakfastText' },
+    { label: '午餐', tagKey: 'mealLunchTag',    textKey: 'mealLunchText' },
+    { label: '晚餐', tagKey: 'mealDinnerText',  textKey: 'mealDinnerText' }
+  ];
+
+  // 默认态 / 清空恢复：回到「还没选标签」的提示
+  function showFilterDefault() {
+    filterResult.innerHTML = '';
+    var p = document.createElement('p');
+    p.className = 'filter-hint';
+    p.textContent = '还没选标签，点上面任何一个开始。';
+    filterResult.appendChild(p);
+  }
+
+  // 无结果空态：口语化文案，不给冷冰冰的「暂无数据」
+  function showFilterEmpty(tag) {
+    filterResult.innerHTML = '';
+    var p = document.createElement('p');
+    p.className = 'filter-hint';
+    p.textContent = '没有找到「' + tag + '」的记录，换个标签试试。';
+    filterResult.appendChild(p);
+  }
+
+  // 有结果：按日期从新到旧，列出所有带该标签的餐次
+  function showFilterHits(tag) {
+    var checkins = window.dhlStorage.getCheckins();
+    var dates = Object.keys(checkins).sort().reverse();
+    var hits = [];
+    dates.forEach(function (dateStr) {
+      var rec = checkins[dateStr];
+      MEALS.forEach(function (meal) {
+        if (rec[meal.tagKey] === tag) {
+          hits.push({ date: dateStr, meal: meal.label, text: rec[meal.textKey] || '' });
+        }
+      });
+    });
+
+    filterResult.innerHTML = '';
+    if (!hits.length) {
+      showFilterEmpty(tag);
+      return;
+    }
+    hits.forEach(function (hit) {
+      var p = document.createElement('p');
+      p.className = 'detail-line';
+      var strong = document.createElement('span');
+      strong.className = 'detail-label';
+      strong.textContent = hit.date + ' · ' + hit.meal + '：';
+      p.appendChild(strong);
+      p.appendChild(document.createTextNode(hit.text ? hit.text + '（' + tag + '）' : tag));
+      filterResult.appendChild(p);
+    });
+  }
+
+  filterGroup.addEventListener('click', function (e) {
+    var btn = e.target.closest('.tag');
+    if (!btn) return;
+    // 同组互斥：先全灭再点亮当前（复用 .tag.active 既有样式）
+    var all = filterGroup.querySelectorAll('.tag');
+    for (var i = 0; i < all.length; i++) all[i].classList.remove('active');
+    btn.classList.add('active');
+
+    var tag = btn.getAttribute('data-tag');
+    if (tag === '') {
+      showFilterDefault();   // 点「全部」= 清空，恢复默认
+    } else {
+      showFilterHits(tag);
+    }
+  });
+
   init();
 })();

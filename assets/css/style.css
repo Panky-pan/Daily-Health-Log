@@ -413,6 +413,21 @@ body {
   color: var(--color-green);
 }
 
+/* ---- Day 12：历史页饮食标签筛选 ---- */
+.filter-tags {
+  flex-wrap: wrap;   /* 360px 下四个胶囊放不下就换行，不许横向溢出 */
+}
+
+#filter-result {
+  margin-top: 6px;
+}
+
+.filter-hint {
+  padding: 8px 0;
+  font-size: 14px;
+  color: var(--color-muted);
+}
+
 /* ---- 趋势页：图表容器（Chart.js 需要固定高度的父容器） ---- */
 .chart-box {
   position: relative;

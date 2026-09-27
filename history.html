@@ -52,6 +52,21 @@
       <p class="cal-hint" id="cal-hint">绿色是打了卡的日子，点一下能看当天详情；还没到的那天点不了。</p>
     </section>
 
+    <!-- Day 12：按饮食标签筛选（frontend-guidelines skill 首次实战）
+         三态：有结果=列出日期行 / 无结果=空态提示 / 清空=点「全部」恢复默认 -->
+    <section class="card">
+      <h2 class="card-title">按饮食标签翻记录</h2>
+      <div class="tag-group filter-tags" id="meal-tag-filter" role="group" aria-label="按饮食标签筛选">
+        <button type="button" class="tag active" data-tag="">全部</button>
+        <button type="button" class="tag" data-tag="清爽">清爽</button>
+        <button type="button" class="tag" data-tag="标准">标准</button>
+        <button type="button" class="tag" data-tag="丰盛">丰盛</button>
+      </div>
+      <div id="filter-result">
+        <p class="filter-hint">还没选标签，点上面任何一个开始。</p>
+      </div>
+    </section>
+
     <!-- 单日详情：点日历上有标记的日子出现（PRD F3 / 验收 A7） -->
     <section class="card" id="detail-card" hidden>
       <h2 class="card-title" id="detail-title"></h2>

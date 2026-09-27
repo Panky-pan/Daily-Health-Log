@@ -536,6 +536,72 @@ body {
   padding-top: 24px;
 }
 
+/* ---- Day 11：主按钮状态机 ---- */
+
+/* 处理中：变灰锁死。必须写在 .btn:hover / .btn:active 之后，
+   优先级相同时按源码顺序覆盖，否则悬停变色会盖过禁用态 */
+.btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+  transform: none;      /* 禁掉 :active 的缩小，锁死后按下去不该有反应 */
+}
+
+.btn:disabled:hover {
+  background: var(--color-green-light);   /* 别再变深绿，明确"点了也没用" */
+}
+
+/* 失败提示：按钮上方的红字，出现时带淡入 */
+.hero-error {
+  margin-top: 14px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-danger);
+  animation: card-in 0.3s ease both;
+}
+
+/* ---- Day 11：泡泡戳破动画 ----
+   由 welcome.js 在点击时生成，position:fixed + 视口坐标定位；
+   升起 → 变大 → 消失，模拟被戳破 */
+.bubble {
+  position: fixed;
+  z-index: 10;
+  pointer-events: none;   /* 泡泡不挡鼠标，避免干扰连点测试 */
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.85);
+  border: 2px solid var(--color-green-light);
+  animation: bubble-pop 0.9s ease-out forwards;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes bubble-pop {
+    0%   { transform: translateY(0) scale(0.3); opacity: 0; }
+    20%  { opacity: 1; }
+    70%  { transform: translateY(-46px) scale(1); opacity: 0.9; }
+    100% { transform: translateY(-70px) scale(1.35); opacity: 0; }  /* 破 */
+  }
+
+  /* 小人持续微动效：缓慢上下浮，像举着胳膊在呼吸 */
+  .splash-figure {
+    animation: figure-float 2.6s ease-in-out infinite;
+  }
+
+  @keyframes figure-float {
+    0%, 100% { transform: translateY(0); }
+    50%      { transform: translateY(-8px); }
+  }
+
+  /* 点击瞬间：小人被"点醒"，向上多举一截再落回 */
+  .is-entering .splash-figure {
+    animation: figure-lift 0.9s ease-in-out;
+  }
+
+  @keyframes figure-lift {
+    0%   { transform: translateY(0); }
+    35%  { transform: translateY(-18px); }
+    100% { transform: translateY(0); }
+  }
+}
+
 /* ---- 预览区标题 ---- */
 .preview-title {
   font-size: 17px;

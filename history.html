@@ -67,10 +67,12 @@
       </div>
     </section>
 
-    <!-- 单日详情：点日历上有标记的日子出现（PRD F3 / 验收 A7） -->
+    <!-- 单日详情：点日历上有标记的日子出现（PRD F3 / 验收 A7）
+         Day 13：补「返回日历」按钮，两级视图进出有来有回 -->
     <section class="card" id="detail-card" hidden>
       <h2 class="card-title" id="detail-title"></h2>
       <div id="detail-body"></div>
+      <button type="button" class="btn btn-ghost" id="btn-back-cal" hidden>← 返回日历</button>
     </section>
   </main>
 
@@ -80,6 +82,7 @@
 
 <script src="assets/js/storage.js"></script>
 <script src="assets/js/stats.js"></script>
+<script src="assets/js/state.js"></script>
 <script src="assets/js/history.js"></script>
 
 </body>

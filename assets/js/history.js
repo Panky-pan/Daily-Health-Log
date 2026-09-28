@@ -3,7 +3,9 @@
    - 统计卡：当前连续 / 历史最长 / 坚持率（口径全在 stats.js）
    - 当月日历：打卡日绿色标记、今天描边、未来日期不可点（E8）
    - 上/下月切换（E8 跨月）
-   - 点已打卡的日子 → 下方显示单日详情（A7）
+   - 点已打卡的日子 → 下方显示单日详情（A7）；Day 13 补「返回日历」
+   - Day 13：筛选列表补四态（加载中/有结果/没有结果/失败），?state= 调试，
+     取数走 state.js 的 fetchList（Promise，接真接口只改 state.js）
    数据异常（E1/E2：没有任何记录）时显示引导文案，不报错不白屏。
    ============================================ */
 
@@ -20,6 +22,7 @@
   var detailCard = document.getElementById('detail-card');
   var detailTitle = document.getElementById('detail-title');
   var detailBody = document.getElementById('detail-body');
+  var backBtn = document.getElementById('btn-back-cal');
   var prevBtn = document.getElementById('btn-prev-month');
   var nextBtn = document.getElementById('btn-next-month');
 
@@ -139,8 +142,17 @@
       addDetailLine('提示', '这条记录内容是空的');
     }
     detailCard.hidden = false;
+    backBtn.hidden = false; // 返回按钮随详情一起出现
     detailCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
+
+  // 「返回日历」：收起详情卡（回到第 2 级视图），视线滚回日历
+  backBtn.addEventListener('click', function () {
+    detailCard.hidden = true;
+    backBtn.hidden = true;
+    detailBody.innerHTML = ''; // 顺手清掉上一次的内容
+    calGrid.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  });
 
   function joinMeal(text, tag) {
     var t = text || '';
@@ -192,20 +204,8 @@
     filterResult.appendChild(p);
   }
 
-  // 有结果：按日期从新到旧，列出所有带该标签的餐次
-  function showFilterHits(tag) {
-    var checkins = window.dhlStorage.getCheckins();
-    var dates = Object.keys(checkins).sort().reverse();
-    var hits = [];
-    dates.forEach(function (dateStr) {
-      var rec = checkins[dateStr];
-      MEALS.forEach(function (meal) {
-        if (rec[meal.tagKey] === tag) {
-          hits.push({ date: dateStr, meal: meal.label, text: rec[meal.textKey] || '' });
-        }
-      });
-    });
-
+  // 有结果：按日期从新到旧，列出所有带该标签的餐次（数据由 state.js 给）
+  function renderFilterHits(tag, hits) {
     filterResult.innerHTML = '';
     if (!hits.length) {
       showFilterEmpty(tag);
@@ -223,6 +223,71 @@
     });
   }
 
+  // 扫描逻辑从渲染里拆出来（Day 13）：只负责查数据，不碰 DOM。
+  // 这样 state.js 的 fetchList 才能在「假装异步」结束后把结果交给渲染。
+  function scanFilterHits(tag) {
+    var checkins = window.dhlStorage.getCheckins();
+    var dates = Object.keys(checkins).sort().reverse();
+    var hits = [];
+    dates.forEach(function (dateStr) {
+      var rec = checkins[dateStr];
+      MEALS.forEach(function (meal) {
+        if (rec[meal.tagKey] === tag) {
+          hits.push({ date: dateStr, meal: meal.label, text: rec[meal.textKey] || '' });
+        }
+      });
+    });
+    return hits;
+  }
+
+  /* ---- Day 13：筛选列表四态流程 ----
+     点标签 → 加载中（骨架屏）→ 取数成功：有结果 / 没有结果
+                            → 取数失败：出错提示 + 再试一次按钮
+     ?state=loading / empty / error 可在地址栏强制进入对应状态 */
+
+  var currentTag = ''; // 记录当前筛选的标签，「再试一次」要用
+  var filterSeq = 0;   // 请求序号：连点两个标签时，只有最新一次的结果能上屏
+
+  function showFilterLoading() {
+    filterResult.innerHTML = '';
+    // 骨架屏复用 Day 8 的 .skeleton-line（灰块呼吸动画，受减动效设置保护）；
+    // 三行 + 最后一行短一截，暗示「这里马上会出现几行日期记录」
+    for (var i = 0; i < 3; i++) {
+      var div = document.createElement('div');
+      div.className = 'skeleton-line' + (i === 2 ? ' skeleton-line-short' : '');
+      filterResult.appendChild(div);
+    }
+  }
+
+  function showFilterError(tag) {
+    filterResult.innerHTML = '';
+    var p = document.createElement('p');
+    p.className = 'filter-error';
+    p.textContent = '记录暂时翻不出来了，稍后再试。';
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'btn btn-ghost';
+    btn.textContent = '再试一次';
+    btn.addEventListener('click', function () { runFilter(tag); });
+    filterResult.appendChild(p);
+    filterResult.appendChild(btn);
+  }
+
+  function runFilter(tag) {
+    currentTag = tag;
+    var seq = ++filterSeq; // 领号：我是第几次请求
+    showFilterLoading();
+    window.dhlState.fetchList(function () { return scanFilterHits(tag); })
+      .then(function (res) {
+        if (seq !== filterSeq) return; // 已经有更新的请求，旧结果作废
+        renderFilterHits(tag, res.items);
+      })
+      .catch(function () {
+        if (seq !== filterSeq) return;
+        showFilterError(tag);
+      });
+  }
+
   filterGroup.addEventListener('click', function (e) {
     var btn = e.target.closest('.tag');
     if (!btn) return;
@@ -233,9 +298,10 @@
 
     var tag = btn.getAttribute('data-tag');
     if (tag === '') {
-      showFilterDefault();   // 点「全部」= 清空，恢复默认
+      currentTag = '';
+      showFilterDefault();   // 点「全部」= 清空，恢复默认（不走异步）
     } else {
-      showFilterHits(tag);
+      runFilter(tag);
     }
   });
 

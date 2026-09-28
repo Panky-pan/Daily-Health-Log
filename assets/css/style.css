@@ -428,6 +428,17 @@ body {
   color: var(--color-muted);
 }
 
+/* ---- 筛选列表：请求失败态（Day 13 四态之一） ---- */
+.filter-error {
+  padding: 8px 0;
+  font-size: 14px;
+  color: var(--color-danger);
+}
+
+.filter-error + .btn {
+  margin-top: 6px;
+}
+
 /* ---- 趋势页：图表容器（Chart.js 需要固定高度的父容器） ---- */
 .chart-box {
   position: relative;

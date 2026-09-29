@@ -3,9 +3,14 @@
    全项目唯一出入口：其他文件不许直接碰 localStorage，
    统一走这里，方便将来做容错（E7）和二期迁移。
    存储key约定（TECH_DESIGN 2.2）：
-   - dhl:meta     结构版本号
-   - dhl:settings 全局目标设置（只有一份）
-   - dhl:checkins 以日期字符串为 key 的单日打卡对象
+   - dhl:meta              结构版本号（当前 2）
+   - dhl:settings          全局目标设置（只有一份）
+   - dhl:checkins          以日期字符串为 key 的单日打卡对象
+   - dhl:checkins_backup_v1  v1→v2 迁移前的旧数据备份（只读，永不改写）
+
+   一次性迁移（2026-09-29）：
+   三餐标签由「清爽/标准/丰盛」改为「健康/普通/放纵」（PRD 6.4）。
+   老用户第一次打开任意页面时自动转换一次，细节见 migrateIfNeeded()。
    ============================================ */
 
 (function () {
@@ -14,8 +19,20 @@
   var KEYS = {
     meta: 'dhl:meta',
     settings: 'dhl:settings',
-    checkins: 'dhl:checkins'
+    checkins: 'dhl:checkins',
+    backupV1: 'dhl:checkins_backup_v1'
   };
+
+  // 当前数据结构版本（TECH_DESIGN 2.2）
+  var SCHEMA_VERSION = 2;
+
+  // v1 → v2 的三餐标签映射（2026-09-29 拍板：一对一）
+  // 清爽 → 健康、标准 → 普通、丰盛 → 放纵
+  var LEGACY_TAG_MAP = { '清爽': '健康', '标准': '普通', '丰盛': '放纵' };
+  var MEAL_TAG_KEYS = ['mealBreakfastTag', 'mealLunchTag', 'mealDinnerTag'];
+
+  // 最近一次迁移的结果，供页面/控制台查看（没迁过就是 null）
+  var lastMigration = null;
 
   /**
    * 读取一个 key 并解析 JSON。
@@ -45,10 +62,79 @@
     }
   }
 
-  /* ---- meta：数据结构版本号，首次访问时补写 ---- */
+  /* ---- meta：结构版本号 + 一次性迁移 ---- */
+
+  /**
+   * 把一条记录里的旧标签换成新标签（就地改）。
+   * @returns {number} 这次换掉几个标签（0 = 本来就是新标签 / 空的餐次）
+   */
+  function convertRecordTags(record) {
+    if (!record || typeof record !== 'object') return 0;
+    var count = 0;
+    MEAL_TAG_KEYS.forEach(function (key) {
+      var value = record[key];
+      // 用 hasOwnProperty 判断，避免 'constructor' 这类怪值被当成映射命中
+      if (Object.prototype.hasOwnProperty.call(LEGACY_TAG_MAP, value)) {
+        record[key] = LEGACY_TAG_MAP[value];
+        count++;
+      }
+    });
+    return count;
+  }
+
+  /**
+   * 一次性数据迁移：v1 → v2（2026-09-29，TECH_DESIGN 2.2）
+   * 做什么：三餐标签「清爽/标准/丰盛」→「健康/普通/放纵」。
+   *
+   * 三条安全措施（数据只在自己浏览器里，所以更要小心）：
+   *   1. 改写前先把旧的整份 checkins 备份到 dhl:checkins_backup_v1；
+   *      **备份已存在就不覆盖**——保证那份备份里永远是"迁移前"的原始数据；
+   *   2. 迁移成功后写 schemaVersion: 2 —— 幂等：以后打开多少次都不会重复转换
+   *      （也是防止把「健康」这类新标签再映射一遍）；
+   *   3. 只动三餐标签值，其他字段和 dhl:settings 一概不碰；读不到数据（E2）
+   *      时按"没有迁移可做"处理，不抛错、不白屏。
+   *
+   * @returns {boolean} 这次是否真的执行了迁移
+   */
+  function migrateIfNeeded() {
+    var meta = read(KEYS.meta, null);
+    var version = meta ? Number(meta.schemaVersion) : NaN;
+    if (version >= SCHEMA_VERSION) return false; // 已是新版：直接收工
+
+    var checkins = read(KEYS.checkins, null);
+    var hasRecords = !!checkins && typeof checkins === 'object';
+
+    // 全新用户（既没有版本号、也没有任何记录）：补写版本号，不算一次迁移
+    if (!hasRecords && isNaN(version)) {
+      write(KEYS.meta, { schemaVersion: SCHEMA_VERSION });
+      return false;
+    }
+
+    var convertedTags = 0;
+    if (hasRecords) {
+      if (read(KEYS.backupV1, null) === null) {
+        write(KEYS.backupV1, checkins); // 备份失败也不中断：写入本身有 try/catch
+      }
+      Object.keys(checkins).forEach(function (date) {
+        convertedTags += convertRecordTags(checkins[date]);
+      });
+      write(KEYS.checkins, checkins);
+    }
+    write(KEYS.meta, { schemaVersion: SCHEMA_VERSION });
+
+    lastMigration = {
+      from: isNaN(version) ? 1 : version,
+      to: SCHEMA_VERSION,
+      tags: convertedTags
+    };
+    return true;
+  }
+
   function ensureMeta() {
+    // 先做迁移（meta 缺失但存着老数据时也能正确转换），再补写版本号
+    migrateIfNeeded();
     if (read(KEYS.meta, null) === null) {
-      write(KEYS.meta, { schemaVersion: 1 });
+      write(KEYS.meta, { schemaVersion: SCHEMA_VERSION });
     }
   }
 
@@ -84,9 +170,17 @@
     return { ok: true, isNew: isNew };
   }
 
+  // 页面一打开就先做一次版本检查 + 迁移：
+  // 只要某个页面引用了 storage.js（今日/历史/趋势页都引），
+  // 后面读到的数据就一定已经是新版本了，页面脚本不用各自记得调用。
+  migrateIfNeeded();
+
   // 暴露给其他文件用的接口（挂到 window.dhlStorage 上）
   window.dhlStorage = {
     ensureMeta: ensureMeta,
+    migrateIfNeeded: migrateIfNeeded,
+    getLastMigration: function () { return lastMigration; },
+    BACKUP_KEY: KEYS.backupV1,
     getSettings: getSettings,
     saveSettings: saveSettings,
     getCheckins: getCheckins,

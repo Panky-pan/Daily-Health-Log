@@ -30,49 +30,50 @@
 
   // 最近 7 天的假记录，从旧到新，最后一条是「今天」。
   // 这里只写数值和文字，日期由 buildRecords() 按今天倒推生成，所以永远看起来是「最近 7 天」。
+  // 三餐标签用 2026-09-29 起的新枚举（健康/普通/放纵，见 PRD 6.1/6.4），和真数据的形状保持一致。
   var FAKE_DAYS = [
     {
       exerciseType: '慢跑', exerciseMinutes: 30,
       weightKg: 66.2, waterMl: 1600,
       meals: ['鸡蛋 + 牛奶', '公司食堂', '番茄鸡蛋面'],
-      tags: ['标准', '标准', '标准']
+      tags: ['普通', '普通', '普通']
     },
     {
       exerciseType: '散步', exerciseMinutes: 45,
       weightKg: 66.0, waterMl: 1800,
       meals: ['豆浆 + 包子', '轻食沙拉', '水煮菜 + 鸡胸'],
-      tags: ['标准', '清爽', '清爽']
+      tags: ['普通', '健康', '健康']
     },
     {
       exerciseType: '力量训练', exerciseMinutes: 25,
       weightKg: 65.8, waterMl: 2000,
       meals: ['燕麦 + 香蕉', '米饭 + 炒青菜', '火锅'],
-      tags: ['清爽', '标准', '丰盛']
+      tags: ['健康', '普通', '放纵']
     },
     {
       // 故意留一天「没运动、只记了午餐」，用来展示「部分填写」也能有一行记录
       exerciseType: '', exerciseMinutes: 0,
       weightKg: 65.9, waterMl: 1200,
       meals: ['', '面包 + 咖啡', ''],
-      tags: ['', '标准', '']
+      tags: ['', '普通', '']
     },
     {
       exerciseType: '跳绳', exerciseMinutes: 15,
       weightKg: 65.6, waterMl: 2200,
       meals: ['鸡蛋饼', '公司食堂', '牛奶 + 水果'],
-      tags: ['标准', '标准', '清爽']
+      tags: ['普通', '普通', '健康']
     },
     {
       exerciseType: '瑜伽', exerciseMinutes: 40,
       weightKg: 65.4, waterMl: 1900,
       meals: ['酸奶 + 坚果', '轻食沙拉', '番茄牛腩面'],
-      tags: ['清爽', '清爽', '丰盛']
+      tags: ['健康', '健康', '放纵']
     },
     {
       exerciseType: '骑行', exerciseMinutes: 35,
       weightKg: 65.2, waterMl: 1500,
       meals: ['鸡蛋 + 牛奶', '轻食沙拉', '清炒时蔬'],
-      tags: ['标准', '清爽', '清爽']
+      tags: ['普通', '健康', '健康']
     }
   ];
 

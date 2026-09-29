@@ -4,6 +4,7 @@
    - 当月日历：打卡日绿色标记、今天描边、未来日期不可点（E8）
    - 上/下月切换（E8 跨月）
    - 点已打卡的日子 → 下方显示单日详情（A7）；Day 13 补「返回日历」
+   - Day 14：单日详情补「饮食健康分」（PRD 6.4），分值由 stats.js 实时算
    - Day 13：筛选列表补四态（加载中/有结果/没有结果/失败），?state= 调试，
      取数走 state.js 的 fetchList（Promise，接真接口只改 state.js）
    数据异常（E1/E2：没有任何记录）时显示引导文案，不报错不白屏。
@@ -135,6 +136,14 @@
     addDetailLine('早餐', joinMeal(record.mealBreakfastText, record.mealBreakfastTag));
     addDetailLine('午餐', joinMeal(record.mealLunchText, record.mealLunchTag));
     addDetailLine('晚餐', joinMeal(record.mealDinnerText, record.mealDinnerTag));
+
+    // 当天饮食健康分（PRD 6.4）：派生值，按当天标签实时算；
+    // 三餐一个标签都没打时是「没有分数」，这行就不出现（不显示 0 分）
+    var diet = window.dhlStats.dietScore(record);
+    if (diet.score !== null) {
+      addDetailLine('饮食健康分', diet.score + ' / ' + diet.max + ' 分');
+    }
+
     addDetailLine('体重', record.weightKg === '' ? '' : record.weightKg + ' kg');
     addDetailLine('饮水', record.waterMl === '' ? '' : record.waterMl + ' ml');
 
@@ -183,7 +192,7 @@
   var MEALS = [
     { label: '早餐', tagKey: 'mealBreakfastTag', textKey: 'mealBreakfastText' },
     { label: '午餐', tagKey: 'mealLunchTag',    textKey: 'mealLunchText' },
-    { label: '晚餐', tagKey: 'mealDinnerText',  textKey: 'mealDinnerText' }
+    { label: '晚餐', tagKey: 'mealDinnerTag',   textKey: 'mealDinnerText' }
   ];
 
   // 默认态 / 清空恢复：回到「还没选标签」的提示

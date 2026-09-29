@@ -1,6 +1,6 @@
 # TECH_DESIGN ·「每日健康打卡」(Daily-Health-Log)
 
-> 版本：v1.3　撰写日期：2026-09-21　最近更新：2026-09-28
+> 版本：v1.4　撰写日期：2026-09-21　最近更新：2026-09-29
 > 依据文档：PRD.md v1.1（2026-09-21）、research.md（2026-09-19）
 > 读者：零基础开发者（Panky）本人，以及未来任何想接手这个项目的人
 >
@@ -18,6 +18,7 @@
 > | v1.1 | 2026-09-21 | 新增 3.0 施工顺序（Panky 拍板）；2.3 节新增数据流图（源文件 dataflow.svg，文档引用 dataflow.png，Day 5 主任务） |
 > | v1.2 | 2026-09-22 | 2.1 项目结构目录口径统一为 `assets/css/`、`assets/js/`、`assets/img/`（与 AGENTS.md 第 8 节目录约定对齐，附录五表格同步）；2.1 文件清单补全（README.md、AGENTS.md、.gitignore、dataflow.svg/png）；2.1 结构图中 index.html 的重复表述改为文末说明；同步修正文档头版本号（此前正文记为 v1.0、修订表已到 v1.1，属记录遗漏） |
 > | v1.3 | 2026-09-28 | 新增 2.5「视图结构与页面四态」（Day 13）：视图路径表、MPA 选型结论、历史页列表四态定义与 `?state=` 调试约定 |
+> | v1.4 | 2026-09-29 | 2.2 三餐标签枚举改为「健康/普通/放纵」、schemaVersion 升为 2 并写明 v1→v2 一次性迁移；3.2 二期 SQL 的 CHECK 约束同步 |
 
 ---
 
@@ -119,7 +120,7 @@ Daily-Health-Log/
 
 | key | 内容 | 说明 |
 |---|---|---|
-| `dhl:meta` | `{ "schemaVersion": 1 }` | 数据结构版本号，将来迁移/升级时程序据此判断要不要做数据转换 |
+| `dhl:meta` | `{ "schemaVersion": 2 }` | 数据结构版本号，程序据此判断要不要做数据转换。**v1 → v2（2026-09-29）**：三餐标签由「清爽 / 标准 / 丰盛」改为「健康 / 普通 / 放纵」。`storage.js` 读到 v1 数据时做**一次性迁移**（映射：清爽→健康、标准→普通、丰盛→放纵），迁移前先把旧数据整份备份到 `dhl:checkins_backup_v1`，迁移成功后写回 `schemaVersion: 2`（幂等：已是 2 不再转换） |
 | `dhl:settings` | `{ "goalExerciseMinutes": 30, "goalWaterMl": 2000, "startDate": "2026-09-21" }` | 全局设置（PRD 6.2），只有一份；`startDate` 在首次保存打卡时自动写入，用于坚持率分母 |
 | `dhl:checkins` | `{ "2026-09-21": { …单日记录… }, "2026-09-22": { … } }` | **以日期字符串为 key 的对象**：同一天天然只有一条，覆盖保存 = 给同 key 赋值（E6 免费解决） |
 
@@ -132,9 +133,9 @@ Daily-Health-Log/
   "exerciseMinutes": 30,
   "exerciseCalories": 300,
   "mealBreakfastText": "鸡蛋 + 牛奶",
-  "mealBreakfastTag": "标准",
+  "mealBreakfastTag": "普通",
   "mealLunchText": "轻食沙拉",
-  "mealLunchTag": "清爽",
+  "mealLunchTag": "健康",
   "mealDinnerText": "",
   "mealDinnerTag": "",
   "weightKg": 65.5,
@@ -142,7 +143,7 @@ Daily-Health-Log/
 }
 ```
 
-约束：`date` 为 `YYYY-MM-DD` 本地日期（GMT+8）；未填项存空字符串 / 缺省，不存 null 嵌套；`exerciseCalories` 永远由 `calories.js` 计算，不接受表单输入。
+约束：`date` 为 `YYYY-MM-DD` 本地日期（GMT+8）；未填项存空字符串 / 缺省，不存 null 嵌套；`exerciseCalories` 永远由 `calories.js` 计算，不接受表单输入；三餐标签枚举固定为「健康 / 普通 / 放纵」；**饮食健康分（PRD 6.4）是派生值，不落任何字段**——展示时由 `stats.js` 按当天标签实时算出，二期数据库表也不建这一列（口径若调整，历史数据无需返工）。
 
 ### 2.3 数据流（无后端版）
 
@@ -286,11 +287,13 @@ CREATE TABLE checkins (
   exercise_minutes    INTEGER CHECK (exercise_minutes >= 0),
   exercise_calories   INTEGER,                       -- 前端算好后随表单提交存档
   meal_breakfast_text TEXT,
-  meal_breakfast_tag  TEXT CHECK (meal_breakfast_tag IN ('清爽','标准','丰盛') OR meal_breakfast_tag IS NULL),
+  -- 饮食标签枚举（2026-09-29 起）：健康 / 普通 / 放纵，对应 PRD 6.4 的 2 / 1 / 0 分
+  -- 旧数据（清爽/标准/丰盛）在导入前于应用层转换：清爽→健康、标准→普通、丰盛→放纵
+  meal_breakfast_tag  TEXT CHECK (meal_breakfast_tag IN ('健康','普通','放纵') OR meal_breakfast_tag IS NULL),
   meal_lunch_text     TEXT,
-  meal_lunch_tag      TEXT CHECK (meal_lunch_tag IN ('清爽','标准','丰盛') OR meal_lunch_tag IS NULL),
+  meal_lunch_tag      TEXT CHECK (meal_lunch_tag IN ('健康','普通','放纵') OR meal_lunch_tag IS NULL),
   meal_dinner_text    TEXT,
-  meal_dinner_tag     TEXT CHECK (meal_dinner_tag IN ('清爽','标准','丰盛') OR meal_dinner_tag IS NULL),
+  meal_dinner_tag     TEXT CHECK (meal_dinner_tag IN ('健康','普通','放纵') OR meal_dinner_tag IS NULL),
   weight_kg           NUMERIC(4,1) CHECK (weight_kg BETWEEN 30 AND 200),
   water_ml            INTEGER CHECK (water_ml >= 0),
   created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -388,7 +391,7 @@ CREATE TABLE settings (
 
 1. **PRD 修订先行**：动工前按 PRD 2.2 的演进原则修订 1.2 产品说明表（"纯前端 + localStorage" → 云端描述），保持文档与现实一致。
 2. **字段命名已提前对齐**：路线 A 的 localStorage 字段就是数据库列的 camelCase 版，导出即可导入，无需映射表。
-3. **导出格式现在就定死**：MVP 增加一个隐藏入口或手动约定——把 `dhl:checkins` 与 `dhl:settings` 合并导出为 `{"schemaVersion":1,"settings":{…},"checkins":[…]}` JSON。二期 B9 接口按这个格式吃。
+3. **导出格式现在就定死**：MVP 增加一个隐藏入口或手动约定——把 `dhl:checkins` 与 `dhl:settings` 合并导出为 `{"schemaVersion":2,"settings":{…},"checkins":[…]}` JSON。二期 B9 接口按这个格式吃。
 4. **导入流程安全**：先跑 B9 导入 → 抽查若干天数据与本地一致 → **确认无误后由用户手动决定是否清 localStorage**，程序永不自动删本地数据。
 5. **卡路里换算表与统计算法留在前端**：不因为有了后端就挪进数据库/云函数——估算值属于展示逻辑，挪走只会增加接口复杂度。
 6. **时区纪律**：`date` 全链路用 `YYYY-MM-DD` 本地日期字符串，数据库列用 `DATE` 类型；禁止任何环节把日期转成 UTC 时间戳再存，否则 GMT+8 的"今天"会错位成"昨天"。
@@ -403,7 +406,7 @@ CREATE TABLE settings (
 | 事项 | 路线 A（MVP，现在） | 路线 B（二期，设计就绪） |
 |---|---|---|
 | 前端 | 原生 HTML/CSS/JS，3 页 3 文件 | React + Vite，组件化复刻同样 3 页 |
-| 数据存储 | localStorage（`dhl:` 前缀，schemaVersion=1） | CloudBase PostgreSQL（checkins / settings / users） |
+| 数据存储 | localStorage（`dhl:` 前缀，schemaVersion=2） | CloudBase PostgreSQL（checkins / settings / users） |
 | 后端 | 无 | CloudBase 云函数（单入口 + action 路由，JWT 鉴权） |
 | 部署 | GitHub Pages | CloudBase 静态托管 |
 | API 列表 | 无（本地函数调用） | B1~B9，见 3.3 |

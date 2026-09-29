@@ -3,6 +3,7 @@
    第 2 步：目标设置（PRD F1）
    第 3 步：今日打卡表单（PRD F2）+ validate.js + calories.js
    第 4 步：streak 大字区 + 目标提醒条（PRD F5），统计来自 stats.js
+   第 14 天：今日饮食健康分卡片（PRD 6.4），分值由 stats.js 实时算，不存库
    ============================================ */
 
 (function () {
@@ -35,6 +36,10 @@
   var streakCurrent = document.getElementById('streak-current');
   var streakLongest = document.getElementById('streak-longest');
   var reminderBar = document.getElementById('reminder-bar');
+  var dietCard = document.getElementById('diet-card');
+  var dietScoreNum = document.getElementById('diet-score-num');
+  var dietScoreMax = document.getElementById('diet-score-max');
+  var dietScoreHint = document.getElementById('diet-score-hint');
 
   function isValidMinutes(v) {
     return Number.isInteger(v) && v >= 1 && v <= 600;
@@ -52,6 +57,7 @@
     checkinCard.hidden = true;   // 没设目标前，打卡表单先不出现（PRD F1）
     streakCard.hidden = true;    // streak 与提醒条也等目标就位后再出现
     reminderBar.hidden = true;
+    dietCard.hidden = true;      // 健康分卡片同理，等目标就位后再出现
   }
 
   function showGoalCard(settings) {
@@ -62,8 +68,10 @@
     checkinCard.hidden = false;  // 目标就位，打卡表单出现
     streakCard.hidden = false;
     reminderBar.hidden = false;
+    dietCard.hidden = false;
     renderStreak();
     renderReminder();
+    renderDietScore();
   }
 
   settingsForm.addEventListener('submit', function (e) {
@@ -264,9 +272,10 @@
       calorieNote.hidden = false;
     }
 
-    // 打卡内容变了，streak 和提醒条跟着刷新
+    // 打卡内容变了，streak、提醒条、健康分跟着刷新
     renderStreak();
     renderReminder();
+    renderDietScore();
   });
 
   /* ============ 三、streak 大字区 + 目标提醒条（F5） ============ */
@@ -307,6 +316,40 @@
       reminderBar.classList.add('reminder-warn');
     }
     reminderBar.hidden = false;
+  }
+
+  /* ---- 今日饮食健康分卡片（PRD 6.4） ---- */
+
+  // 标签图标只用于页面显示；存储值仍是纯文字「健康/普通/放纵」（PRD 6.4「界面文案」）
+  var TAG_ICONS = { '健康': '🥗', '普通': '🍚', '放纵': '🍔' };
+  var MEAL_LABELS = { breakfast: '早餐', lunch: '午餐', dinner: '晚餐' };
+
+  // 有标签 → 显示「4 / 6 分」+ 每餐明细；三餐都没打标签 → 显示「—」+ 引导文案，
+  // 不显示 0/6（PRD 6.4：免得把"没记"误读成"吃得最差"）
+  function renderDietScore() {
+    var record = window.dhlStorage.getCheckins()[todayStr()];
+    var result = window.dhlStats.dietScore(record);
+
+    if (result.score === null) {
+      dietScoreNum.textContent = '—';
+      dietScoreMax.hidden = true;
+      dietScoreHint.textContent = '今天还没记饮食，三餐随便点一个标签就有分了。';
+      return;
+    }
+
+    dietScoreNum.textContent = result.score;
+    dietScoreMax.textContent = '/ ' + result.max + ' 分';
+    dietScoreMax.hidden = false;
+
+    // 明细只列打了标签的餐（没打标签的餐不计分，也就不在这儿占位置）
+    var parts = [];
+    MEAL_KEYS.forEach(function (meal) {
+      var tag = record['meal' + capitalize(meal) + 'Tag'];
+      if (!Object.prototype.hasOwnProperty.call(TAG_ICONS, tag)) return;
+      parts.push(TAG_ICONS[tag] + ' ' + MEAL_LABELS[meal] + ' ' +
+        window.dhlStats.DIET_TAG_SCORES[tag] + ' 分');
+    });
+    dietScoreHint.textContent = parts.join(' · ');
   }
 
   /* ============ 四、页面初始化 ============ */

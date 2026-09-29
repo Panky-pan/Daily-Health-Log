@@ -5,12 +5,18 @@
    - 当前 streak：今天已打卡 → 从今天往前数；今天没打卡 → 从昨天往前数
      （不因“今天还没打”清零，今天打卡后自动 +1）
    - 历史最长：全部记录中出现过的最大连续天数
+   - 饮食健康分（PRD 6.4，2026-09-29 新增）：每餐 2/1/0，全天 0~6
    ============================================ */
 
 (function () {
   'use strict';
 
   var MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+  // 饮食健康分口径（PRD 6.4，2026-09-29 拍板）：健康 2 分 / 普通 1 分 / 放纵 0 分
+  var DIET_TAG_SCORES = { '健康': 2, '普通': 1, '放纵': 0 };
+  var MEAL_TAG_KEYS = ['mealBreakfastTag', 'mealLunchTag', 'mealDinnerTag'];
+  var SCORE_PER_MEAL_MAX = 2;
 
   // 'YYYY-MM-DD' → 本地零点的 Date（不碰 UTC，避免 GMT+8 错位）
   function parseDate(str) {
@@ -98,6 +104,37 @@
   }
 
   /**
+   * 饮食健康分（PRD 6.4，2026-09-29 新增）。
+   * 口径：每餐按标签给分——健康 2 分、普通 1 分、放纵 0 分；
+   * 没打标签的餐按 0 分计，所以全天范围固定 0 ~ 6 分。
+   * 三餐一个标签都没打时算「没有分数」：score 返回 null，
+   * 页面据此显示「今天还没记饮食」，而不是显示 0 分（免得把"没记"当成"吃得最差"）。
+   * 注意：这是派生值，不入库（不写 localStorage，二期也不建数据库列）。
+   * @param {object} record 单日记录，可以没有（当天没打卡 / 没记饮食）
+   * @returns {{score: (number|null), tagged: number, max: number}}
+   *          score 全天分数或 null；tagged 打了几餐标签；max 满分（6）
+   */
+  function dietScore(record) {
+    var score = 0;
+    var tagged = 0;
+    if (record) {
+      MEAL_TAG_KEYS.forEach(function (key) {
+        var tag = record[key];
+        // hasOwnProperty 判断，避免 'constructor' 这类怪值被当成命中
+        if (Object.prototype.hasOwnProperty.call(DIET_TAG_SCORES, tag)) {
+          score += DIET_TAG_SCORES[tag];
+          tagged++;
+        }
+      });
+    }
+    return {
+      score: tagged > 0 ? score : null,
+      tagged: tagged,
+      max: MEAL_TAG_KEYS.length * SCORE_PER_MEAL_MAX
+    };
+  }
+
+  /**
    * 每周运动时长汇总（PRD F4：近 4~8 周柱状图用）。
    * 周按「周一 ~ 周日」划分，返回从旧到新共 weeks 周：
    * [{ label: '9/15~9/21', minutes: 合计分钟 }, ...]（含当前周）
@@ -138,6 +175,8 @@
     currentStreak: currentStreak,
     longestStreak: longestStreak,
     adherence: adherence,
+    dietScore: dietScore,
+    DIET_TAG_SCORES: DIET_TAG_SCORES,
     weeklyExercise: weeklyExercise
   };
 })();

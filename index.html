@@ -88,14 +88,14 @@
           <p class="field-error" id="exercise-error" hidden></p>
         </div>
 
-        <!-- 三餐：一句话 + 标签（清爽/标准/丰盛，只打标签不算热量） -->
+        <!-- 三餐：一句话 + 标签（健康/普通/放纵，只打标签不算热量；分值见 PRD 6.4） -->
         <div class="form-row">
           <label for="breakfast-text">早餐吃了什么</label>
           <input type="text" id="breakfast-text" maxlength="100" placeholder="一句话，比如：鸡蛋 + 牛奶">
           <div class="tag-group" data-meal="breakfast">
-            <button type="button" class="tag" data-tag="清爽">清爽</button>
-            <button type="button" class="tag" data-tag="标准">标准</button>
-            <button type="button" class="tag" data-tag="丰盛">丰盛</button>
+            <button type="button" class="tag" data-tag="健康">🥗 健康</button>
+            <button type="button" class="tag" data-tag="普通">🍚 普通</button>
+            <button type="button" class="tag" data-tag="放纵">🍔 放纵</button>
           </div>
           <p class="field-error" id="breakfast-error" hidden></p>
         </div>
@@ -104,9 +104,9 @@
           <label for="lunch-text">午餐吃了什么</label>
           <input type="text" id="lunch-text" maxlength="100" placeholder="一句话记录">
           <div class="tag-group" data-meal="lunch">
-            <button type="button" class="tag" data-tag="清爽">清爽</button>
-            <button type="button" class="tag" data-tag="标准">标准</button>
-            <button type="button" class="tag" data-tag="丰盛">丰盛</button>
+            <button type="button" class="tag" data-tag="健康">🥗 健康</button>
+            <button type="button" class="tag" data-tag="普通">🍚 普通</button>
+            <button type="button" class="tag" data-tag="放纵">🍔 放纵</button>
           </div>
           <p class="field-error" id="lunch-error" hidden></p>
         </div>
@@ -115,9 +115,9 @@
           <label for="dinner-text">晚餐吃了什么</label>
           <input type="text" id="dinner-text" maxlength="100" placeholder="一句话记录">
           <div class="tag-group" data-meal="dinner">
-            <button type="button" class="tag" data-tag="清爽">清爽</button>
-            <button type="button" class="tag" data-tag="标准">标准</button>
-            <button type="button" class="tag" data-tag="丰盛">丰盛</button>
+            <button type="button" class="tag" data-tag="健康">🥗 健康</button>
+            <button type="button" class="tag" data-tag="普通">🍚 普通</button>
+            <button type="button" class="tag" data-tag="放纵">🍔 放纵</button>
           </div>
           <p class="field-error" id="dinner-error" hidden></p>
         </div>
@@ -142,6 +142,15 @@
       <!-- 保存后的状态与卡路里结果 -->
       <p class="checkin-status" id="checkin-status" hidden></p>
       <p class="calorie-note" id="calorie-note" hidden></p>
+    </section>
+
+    <!-- 今日饮食健康分（PRD 6.4，2026-09-29）：按三餐标签实时算出，不存进 localStorage -->
+    <section class="card diet-card" id="diet-card" hidden>
+      <h2 class="card-title">今日饮食健康分</h2>
+      <p class="diet-score">
+        <span class="diet-score-num" id="diet-score-num">—</span><span class="diet-score-max" id="diet-score-max">/ 6 分</span>
+      </p>
+      <p class="diet-score-hint" id="diet-score-hint"></p>
     </section>
   </main>
 

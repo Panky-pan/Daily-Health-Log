@@ -165,7 +165,7 @@ body {
   max-width: 160px;
 }
 
-/* ---- 三餐标签按钮：清爽 / 标准 / 丰盛（同组互斥单选） ---- */
+/* ---- 三餐标签按钮：健康 / 普通 / 放纵（同组互斥单选） ---- */
 .tag-group {
   display: flex;
   gap: 8px;
@@ -269,6 +269,36 @@ body {
 .calorie-note {
   margin-top: 4px;
   font-size: 14px;
+  color: var(--color-muted);
+}
+
+/* ---- 今日饮食健康分卡片（PRD 6.4，2026-09-29）---- */
+.diet-card {
+  text-align: center;
+}
+
+.diet-score {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 6px;
+  margin: 2px 0 6px;
+}
+
+.diet-score-num {
+  font-size: 40px;
+  font-weight: 800;
+  line-height: 1.1;
+  color: var(--color-green);
+}
+
+.diet-score-max {
+  font-size: 15px;
+  color: var(--color-muted);
+}
+
+.diet-score-hint {
+  font-size: 13px;
   color: var(--color-muted);
 }
 
@@ -847,6 +877,15 @@ body {
 
   .streak-num {
     font-size: 32px;
+  }
+
+  /* 健康分大字跟 streak 同档缩小；提示文案按 Day 10 规则提一档到 14px */
+  .diet-score-num {
+    font-size: 32px;
+  }
+
+  .diet-score-hint {
+    font-size: 14px;
   }
 
   /* 手机上输入框占满整行，别挤在半边 */

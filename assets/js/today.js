@@ -22,6 +22,16 @@
     return d.getFullYear() + '-' + m + '-' + day;
   }
 
+  // 三餐统一口径：入口卡摘要和健康分明细都要按 早餐/午餐/晚餐 的顺序走
+  var MEAL_KEYS = ['breakfast', 'lunch', 'dinner'];
+
+  function capitalize(s) {
+    return s.charAt(0).toUpperCase() + s.slice(1);
+  }
+
+  // 标签图标只用于页面显示；存储值仍是纯文字「健康/普通/放纵」（PRD 6.4「界面文案」）
+  var TAG_ICONS = { '健康': '🥗', '普通': '🍚', '放纵': '🍔' };
+
   /* ============ 一、页面元素 ============ */
 
   var settingsCard = document.getElementById('settings-card');
@@ -125,12 +135,30 @@
 
   /* ============ 三、打卡入口卡（Day 14 板块 A） ============ */
 
+  // 三餐摘要：把三顿的标签图标按早/午/晚顺序并成一串（如 🥗🥗🍔）。
+  // 一个标签都没有 → 返回空串，摘要里就不出现这一段（和"没记饮食"的口径一致）
+  // Day 14 测试 #1：用户回来是想"核对记了啥"，摘要里没有三餐就得再点进修改页才能确认
+  function buildMealTagsPart(record) {
+    var icons = '';
+    var tagged = false;
+    MEAL_KEYS.forEach(function (meal) {
+      var tag = record['meal' + capitalize(meal) + 'Tag'];
+      if (Object.prototype.hasOwnProperty.call(TAG_ICONS, tag)) {
+        icons += TAG_ICONS[tag];
+        tagged = true;
+      }
+    });
+    return tagged ? '三餐 ' + icons : '';
+  }
+
   // 已打卡时把当天记到的东西拼成一行摘要，回填成"我今天记了什么"的提示
   function buildRecordSummary(record) {
     var parts = [];
     if (record.exerciseType && Number(record.exerciseMinutes) > 0) {
       parts.push(record.exerciseType + ' ' + record.exerciseMinutes + ' 分钟');
     }
+    var mealsPart = buildMealTagsPart(record);
+    if (mealsPart) parts.push(mealsPart);
     if (record.waterMl !== '' && record.waterMl !== undefined) {
       parts.push('饮水 ' + record.waterMl + ' ml');
     }
@@ -198,14 +226,8 @@
 
   /* ============ 五、今日饮食健康分卡片（PRD 6.4） ============ */
 
-  // 标签图标只用于页面显示；存储值仍是纯文字「健康/普通/放纵」（PRD 6.4「界面文案」）
-  var TAG_ICONS = { '健康': '🥗', '普通': '🍚', '放纵': '🍔' };
-  var MEAL_KEYS = ['breakfast', 'lunch', 'dinner'];
+  // TAG_ICONS / MEAL_KEYS / capitalize 已提到文件头部的通用工具区（入口卡摘要也要用）
   var MEAL_LABELS = { breakfast: '早餐', lunch: '午餐', dinner: '晚餐' };
-
-  function capitalize(s) {
-    return s.charAt(0).toUpperCase() + s.slice(1);
-  }
 
   // 有标签 → 显示「4 / 6 分」+ 每餐明细；三餐都没打标签 → 显示「—」+ 引导文案，
   // 不显示 0/6（PRD 6.4：免得把"没记"误读成"吃得最差"）

@@ -1,6 +1,6 @@
 /* ============================================
    history.js —— 历史记录页逻辑（PRD F3 / E8）
-   - 统计卡：当前连续 / 历史最长 / 坚持率（口径全在 stats.js）
+   - 统计行（日历卡首行）：当前连续 / 历史最长 / 坚持率（口径全在 stats.js）
    - 当月日历：打卡日绿色标记、今天描边、未来日期不可点（E8）
    - 上/下月切换（E8 跨月）
    - 点已打卡的日子 → 下方显示单日详情（A7）；Day 13 补「返回日历」
@@ -42,7 +42,8 @@
     renderCalendar();
   }
 
-  // 统计卡：streak ×2 + 坚持率
+  // 统计行（Day 14 收尾：从独立统计卡并进日历卡首行，DOM 结构换了但 id 没换）
+  // 一个数字都不改算法，只换位置——所以这个函数本身没动
   function renderStats() {
     var checkins = window.dhlStorage.getCheckins();
     var settings = window.dhlStorage.getSettings();

@@ -384,11 +384,28 @@ body {
 }
 
 /* ---- 历史页：统计卡三个数字并排 ---- */
-.stats-card {
+/* ---- 历史页：日历卡首行的统计（Day 14 收尾：原独立统计卡并进来） ----
+   原来三个数字单独占一张卡（约 82px 高 + 卡间距），现在压成一行小字，
+   数字仍用绿色加粗，但降级为"背景信息"；flex-wrap 保证 360px 下不横向溢出 */
+.cal-stats {
   display: flex;
-  gap: 28px;
+  flex-wrap: wrap;
+  align-items: baseline;
   justify-content: center;
-  padding: 16px;   /* Day 14：从 24 收到 16，配合历史页整体压缩 */
+  gap: 0 6px;
+  margin-bottom: 10px;
+  font-size: 13px;
+  color: var(--color-muted);
+}
+
+.cal-stats strong {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--color-green);
+}
+
+.cal-stats-sep {
+  color: var(--color-border);
 }
 
 /* ---- 历史页：日历（Day 14 压缩：格子改固定高度） ----
@@ -946,18 +963,11 @@ body {
     font-size: 16px;
   }
 
-  /* Day 14：历史页在手机上再压一层 —— 日历格子矮一截、统计条更扁平 */
-  .cal-cell {
-    height: 36px;
-  }
-
-  .stats-card,
+  /* Day 14 收尾：日历格子手机上也用 40px（压缩时是 36px，触控目标偏小）。
+     7 列受屏宽所限，格子宽度约 41px 已到上限，只能从高度上补回来。 */
   .streak-card {
     padding: 14px;
-  }
-
-  .stats-card {
-    gap: 18px;
+    gap: 20px;
   }
 
   /* 导航变四项后，窄屏必须允许换行并收紧内边距，否则会横向溢出 */
@@ -979,11 +989,6 @@ body {
 
   .cal-nav {
     padding: 12px 14px;
-  }
-
-  .streak-card,
-  .stats-card {
-    gap: 20px;
   }
 
   .streak-num {

@@ -1,9 +1,12 @@
 /* ============================================
-   today.js —— 今日打卡页逻辑
+   today.js —— 今日页逻辑（Day 14 起本页不再放表单）
    第 2 步：目标设置（PRD F1）
-   第 3 步：今日打卡表单（PRD F2）+ validate.js + calories.js
    第 4 步：streak 大字区 + 目标提醒条（PRD F5），统计来自 stats.js
    第 14 天：今日饮食健康分卡片（PRD 6.4），分值由 stats.js 实时算，不存库
+   第 14 天板块 A：打卡表单搬去 checkin.html，本页改成"概览 + 入口"，
+                  只留今日目标（含提醒条）、打卡入口、连续天数、健康分四块。
+                  表单逻辑（校验/保存/回填）全部迁到 checkin.js，本页不再引用
+                  calories.js 与 validate.js。
    ============================================ */
 
 (function () {
@@ -19,7 +22,7 @@
     return d.getFullYear() + '-' + m + '-' + day;
   }
 
-  /* ============ 一、目标设置（F1） ============ */
+  /* ============ 一、页面元素 ============ */
 
   var settingsCard = document.getElementById('settings-card');
   var goalCard = document.getElementById('goal-card');
@@ -31,7 +34,9 @@
   var waterGoalError = document.getElementById('goal-water-error');
   var settingsSaveError = document.getElementById('settings-save-error');
   var changeGoalBtn = document.getElementById('btn-change-goal');
-  var checkinCard = document.getElementById('checkin-card');
+  var entryCard = document.getElementById('checkin-entry-card');
+  var entryHint = document.getElementById('checkin-entry-hint');
+  var entryBtn = document.getElementById('checkin-entry-btn');
   var streakCard = document.getElementById('streak-card');
   var streakCurrent = document.getElementById('streak-current');
   var streakLongest = document.getElementById('streak-longest');
@@ -40,6 +45,8 @@
   var dietScoreNum = document.getElementById('diet-score-num');
   var dietScoreMax = document.getElementById('diet-score-max');
   var dietScoreHint = document.getElementById('diet-score-hint');
+
+  /* ============ 二、目标设置（F1） ============ */
 
   function isValidMinutes(v) {
     return Number.isInteger(v) && v >= 1 && v <= 600;
@@ -54,9 +61,8 @@
   function showSettingsForm() {
     goalCard.hidden = true;
     settingsCard.hidden = false;
-    checkinCard.hidden = true;   // 没设目标前，打卡表单先不出现（PRD F1）
+    entryCard.hidden = true;     // 没设目标前，打卡入口先不出现（PRD F1）
     streakCard.hidden = true;    // streak 与提醒条也等目标就位后再出现
-    reminderBar.hidden = true;
     dietCard.hidden = true;      // 健康分卡片同理，等目标就位后再出现
   }
 
@@ -65,12 +71,12 @@
       ' 分钟 · 饮水 ' + settings.goalWaterMl + ' ml';
     settingsCard.hidden = true;
     goalCard.hidden = false;
-    checkinCard.hidden = false;  // 目标就位，打卡表单出现
+    entryCard.hidden = false;
     streakCard.hidden = false;
-    reminderBar.hidden = false;
     dietCard.hidden = false;
     renderStreak();
     renderReminder();
+    renderCheckinEntry();
     renderDietScore();
   }
 
@@ -117,168 +123,40 @@
     showSettingsForm();
   });
 
-  /* ============ 二、今日打卡表单（F2） ============ */
+  /* ============ 三、打卡入口卡（Day 14 板块 A） ============ */
 
-  var checkinForm = document.getElementById('checkin-form');
-  var typeSelect = document.getElementById('exercise-type');
-  var minutesInput = document.getElementById('exercise-minutes');
-  var mealInputs = {
-    breakfast: document.getElementById('breakfast-text'),
-    lunch: document.getElementById('lunch-text'),
-    dinner: document.getElementById('dinner-text')
-  };
-  var weightInput = document.getElementById('weight-kg');
-  var waterInput = document.getElementById('water-ml');
-  var exerciseError = document.getElementById('exercise-error');
-  var weightError = document.getElementById('weight-error');
-  var waterError = document.getElementById('water-error');
-  var saveError = document.getElementById('checkin-save-error');
-  var statusText = document.getElementById('checkin-status');
-  var calorieNote = document.getElementById('calorie-note');
-
-  var MEAL_KEYS = ['breakfast', 'lunch', 'dinner'];
-
-  // 读取某餐当前选中的标签（没选返回 ''）
-  function getSelectedTag(meal) {
-    var group = document.querySelector('.tag-group[data-meal="' + meal + '"]');
-    var active = group ? group.querySelector('.tag.active') : null;
-    return active ? active.getAttribute('data-tag') : '';
+  // 已打卡时把当天记到的东西拼成一行摘要，回填成"我今天记了什么"的提示
+  function buildRecordSummary(record) {
+    var parts = [];
+    if (record.exerciseType && Number(record.exerciseMinutes) > 0) {
+      parts.push(record.exerciseType + ' ' + record.exerciseMinutes + ' 分钟');
+    }
+    if (record.waterMl !== '' && record.waterMl !== undefined) {
+      parts.push('饮水 ' + record.waterMl + ' ml');
+    }
+    if (record.weightKg !== '' && record.weightKg !== undefined) {
+      parts.push('体重 ' + record.weightKg + ' kg');
+    }
+    return parts.join(' · ');
   }
 
-  // 标签按钮：点一下选中（同组互斥），再点一下取消
-  document.querySelectorAll('.tag-group').forEach(function (group) {
-    group.addEventListener('click', function (e) {
-      var btn = e.target.closest('.tag');
-      if (!btn) return;
-      var wasActive = btn.classList.contains('active');
-      group.querySelectorAll('.tag').forEach(function (t) { t.classList.remove('active'); });
-      if (!wasActive) btn.classList.add('active');
-    });
-  });
-
-  function capitalize(s) {
-    return s.charAt(0).toUpperCase() + s.slice(1);
-  }
-
-  // 把当天已有记录填回表单（刷新后回填用，字段名见 TECH_DESIGN 2.2）
-  function fillFormWithRecord(record) {
-    typeSelect.value = record.exerciseType || '';
-    minutesInput.value = record.exerciseMinutes === '' ? '' : record.exerciseMinutes;
-    MEAL_KEYS.forEach(function (meal) {
-      mealInputs[meal].value = record['meal' + capitalize(meal) + 'Text'] || '';
-      var tag = record['meal' + capitalize(meal) + 'Tag'] || '';
-      var group = document.querySelector('.tag-group[data-meal="' + meal + '"]');
-      group.querySelectorAll('.tag').forEach(function (t) {
-        t.classList.toggle('active', t.getAttribute('data-tag') === tag);
-      });
-    });
-    weightInput.value = record.weightKg === '' ? '' : record.weightKg;
-    waterInput.value = record.waterMl === '' ? '' : record.waterMl;
-  }
-
-  function setStatus(text) {
-    statusText.textContent = text;
-    statusText.hidden = false;
-  }
-
-  // 校验失败时在对应字段旁显示红字
-  function showError(el, message) {
-    el.textContent = message;
-    el.hidden = false;
-  }
-
-  checkinForm.addEventListener('submit', function (e) {
-    e.preventDefault();
-
-    // 清掉上一轮的红字和状态
-    [exerciseError, weightError, waterError, saveError].forEach(function (el) { el.hidden = true; });
-    MEAL_KEYS.forEach(function (meal) {
-      document.getElementById(meal + '-error').hidden = true;
-    });
-    statusText.hidden = true;
-    calorieNote.hidden = true;
-
-    // ---- 逐项校验（E5：非法值拦截） ----
-    var minutes = window.dhlValidate.exerciseMinutes(minutesInput.value);
-    if (!minutes.ok) { showError(exerciseError, minutes.message); return; }
-    var weight = window.dhlValidate.weightKg(weightInput.value);
-    if (!weight.ok) { showError(weightError, weight.message); return; }
-    var water = window.dhlValidate.waterMl(waterInput.value);
-    if (!water.ok) { showError(waterError, water.message); return; }
-
-    var meals = {};
-    var mealBad = false;
-    MEAL_KEYS.forEach(function (meal) {
-      var r = window.dhlValidate.mealText(mealInputs[meal].value);
-      if (!r.ok) {
-        showError(document.getElementById(meal + '-error'), r.message);
-        mealBad = true;
-      }
-      meals[meal] = { text: r.value, tag: getSelectedTag(meal) };
-    });
-    if (mealBad) return;
-
-    // ---- 全空拦截（E3：至少填一项） ----
-    var hasExercise = typeSelect.value !== '' && minutes.value !== '' && minutes.value > 0;
-    var hasMeal = MEAL_KEYS.some(function (meal) {
-      return meals[meal].text !== '' || meals[meal].tag !== '';
-    });
-    var hasWeight = weight.value !== '';
-    var hasWater = water.value !== '';
-    if (!hasExercise && !hasMeal && !hasWeight && !hasWater) {
-      showError(saveError, '至少填一项再保存哦');
+  // 今天没记录 → 引导去记；已记录 → 报一句"记了啥"并把按钮换成"修改记录"
+  // （每次打开本页都会重算，所以从 checkin.html 跳回来立刻就是最新的）
+  function renderCheckinEntry() {
+    var record = window.dhlStorage.getCheckins()[todayStr()];
+    if (!record) {
+      entryHint.textContent = '今天还没记，花一分钟填一下运动、三餐和饮水吧。';
+      entryBtn.textContent = '去打卡';
       return;
     }
+    var summary = buildRecordSummary(record);
+    entryHint.textContent = summary
+      ? '今天已经记过了：' + summary
+      : '今天已经记过了，点一下可以改。';
+    entryBtn.textContent = '修改记录';
+  }
 
-    // ---- 组装单日记录（字段名与 TECH_DESIGN 2.2 一致，camelCase） ----
-    var date = todayStr();
-    var calories = 0;
-    if (hasExercise) {
-      calories = window.dhlCalories.estimate(typeSelect.value, minutes.value);
-    }
-    var record = {
-      date: date,
-      exerciseType: hasExercise ? typeSelect.value : '',
-      exerciseMinutes: hasExercise ? minutes.value : '',
-      exerciseCalories: hasExercise ? calories : '',
-      mealBreakfastText: meals.breakfast.text,
-      mealBreakfastTag: meals.breakfast.tag,
-      mealLunchText: meals.lunch.text,
-      mealLunchTag: meals.lunch.tag,
-      mealDinnerText: meals.dinner.text,
-      mealDinnerTag: meals.dinner.tag,
-      weightKg: weight.value,
-      waterMl: water.value
-    };
-
-    // ---- 写入 localStorage（E7 失败要明说，不假装成功） ----
-    var result = window.dhlStorage.saveCheckin(date, record);
-    if (!result.ok) {
-      showError(saveError, '没存上，检查一下浏览器存储设置再试试');
-      return;
-    }
-
-    // ---- 首次打卡：把开始使用日期写进设置（坚持率分母用） ----
-    var settings = window.dhlStorage.getSettings();
-    if (settings && !settings.startDate) {
-      settings.startDate = date;
-      window.dhlStorage.saveSettings(settings);
-    }
-
-    // ---- 保存后的页面反馈（E6：覆盖时提示“已更新”） ----
-    setStatus(result.isNew ? '今日已打卡 ✓' : '已更新今日记录');
-    if (calories > 0) {
-      calorieNote.textContent = typeSelect.value + ' ' + minutes.value + ' 分钟 ≈ ' + calories + ' 大卡';
-      calorieNote.hidden = false;
-    }
-
-    // 打卡内容变了，streak、提醒条、健康分跟着刷新
-    renderStreak();
-    renderReminder();
-    renderDietScore();
-  });
-
-  /* ============ 三、streak 大字区 + 目标提醒条（F5） ============ */
+  /* ============ 四、streak 大字区 + 目标提醒条（F5） ============ */
 
   // 顶部两个大数字：当前连续 / 历史最长（口径在 stats.js，PRD F3）
   function renderStreak() {
@@ -318,11 +196,16 @@
     reminderBar.hidden = false;
   }
 
-  /* ---- 今日饮食健康分卡片（PRD 6.4） ---- */
+  /* ============ 五、今日饮食健康分卡片（PRD 6.4） ============ */
 
   // 标签图标只用于页面显示；存储值仍是纯文字「健康/普通/放纵」（PRD 6.4「界面文案」）
   var TAG_ICONS = { '健康': '🥗', '普通': '🍚', '放纵': '🍔' };
+  var MEAL_KEYS = ['breakfast', 'lunch', 'dinner'];
   var MEAL_LABELS = { breakfast: '早餐', lunch: '午餐', dinner: '晚餐' };
+
+  function capitalize(s) {
+    return s.charAt(0).toUpperCase() + s.slice(1);
+  }
 
   // 有标签 → 显示「4 / 6 分」+ 每餐明细；三餐都没打标签 → 显示「—」+ 引导文案，
   // 不显示 0/6（PRD 6.4：免得把"没记"误读成"吃得最差"）
@@ -352,30 +235,17 @@
     dietScoreHint.textContent = parts.join(' · ');
   }
 
-  /* ============ 四、页面初始化 ============ */
+  /* ============ 六、页面初始化 ============ */
 
   function init() {
     window.dhlStorage.ensureMeta();
 
-    // 目标设置：有 → 显示目标卡片；无 → 显示设置表单（打卡表单保持隐藏）
+    // 目标设置：有 → 显示概览四块；无 → 只显示设置表单
     var settings = window.dhlStorage.getSettings();
     if (isValidSettings(settings)) {
       showGoalCard(settings);
     } else {
       showSettingsForm();
-      return; // 还没设目标，打卡部分不用管
-    }
-
-    // 当天已有记录 → 回填表单 + 显示已打卡状态（A4 验收项）
-    var today = window.dhlStorage.getCheckins()[todayStr()];
-    if (today) {
-      fillFormWithRecord(today);
-      setStatus('今日已打卡 ✓');
-      if (today.exerciseCalories && today.exerciseType) {
-        calorieNote.textContent = today.exerciseType + ' ' + today.exerciseMinutes +
-          ' 分钟 ≈ ' + today.exerciseCalories + ' 大卡';
-        calorieNote.hidden = false;
-      }
     }
   }
 

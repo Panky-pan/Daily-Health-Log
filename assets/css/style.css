@@ -94,6 +94,30 @@ body {
   background-color: var(--color-green-light);
 }
 
+/* ---- 打卡独立页顶栏（Day 14 板块 A）----
+   这页不挂四项导航，只放一条「返回今日」，所以单给一条样式 */
+.page-header {
+  justify-content: flex-start;
+  gap: 14px;
+}
+
+.page-back {
+  padding: 8px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+  color: var(--color-green);
+  background: var(--color-green-pale);
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.page-back:hover {
+  color: #fff;
+  background: var(--color-green-light);
+}
+
 /* ---- 卡片：内容区的基础容器 ---- */
 .card {
   background: var(--color-card);
@@ -243,6 +267,7 @@ body {
    :focus-visible 只在键盘 Tab 导航时显示光环，鼠标点击不出现、外观不受影响。
    覆盖全站可点元素：导航链接 / 按钮 / 三餐标签 / 日历已打卡格子 */
 .site-nav a:focus-visible,
+.page-back:focus-visible,
 .btn:focus-visible,
 .tag:focus-visible,
 .cal-cell.checked:focus-visible {
@@ -286,7 +311,7 @@ body {
 }
 
 .diet-score-num {
-  font-size: 40px;
+  font-size: 32px;   /* Day 14：原 40px，大字收一档（手机上还要再收，见媒体查询） */
   font-weight: 800;
   line-height: 1.1;
   color: var(--color-green);
@@ -307,7 +332,7 @@ body {
   display: flex;
   gap: 32px;
   justify-content: center;
-  padding: 24px;   /* Day 9 审查问题 5：与其他卡片统一为 24px */
+  padding: 16px;   /* Day 14：从 24 收到 16，卡片更扁 */
 }
 
 .streak-item {
@@ -318,7 +343,7 @@ body {
 }
 
 .streak-num {
-  font-size: 40px;
+  font-size: 32px;   /* Day 14：原 40px，大字收一档 */
   font-weight: 800;
   line-height: 1.1;
   color: var(--color-green);
@@ -352,21 +377,29 @@ body {
   border: 1px solid var(--color-green-light);
 }
 
+/* Day 14：提醒条搬进「今日目标」卡内部（不再单独占一块），
+   上下留白改由卡片自己负责，所以这里把外间距压掉 */
+.reminder-in-card {
+  margin: 0 0 14px;
+}
+
 /* ---- 历史页：统计卡三个数字并排 ---- */
 .stats-card {
   display: flex;
-  gap: 32px;
+  gap: 28px;
   justify-content: center;
-  padding: 24px;   /* Day 9 审查问题 5：与其他卡片统一为 24px */
+  padding: 16px;   /* Day 14：从 24 收到 16，配合历史页整体压缩 */
 }
 
-/* ---- 历史页：日历 ---- */
+/* ---- 历史页：日历（Day 14 压缩：格子改固定高度） ----
+   原来用 aspect-ratio: 1/1，桌面端 720px 宽时每格被撑到 ~96px 高，
+   六行日历光格子就 600px+，全页最占高度。改成固定高度后一屏能看完整月。 */
 .cal-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  margin-bottom: 12px;
+  margin-bottom: 8px;
 }
 
 .cal-nav {
@@ -378,18 +411,18 @@ body {
 .calendar-grid {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
-  gap: 4px;
+  gap: 2px;
 }
 
 .calendar-weekdays span {
   text-align: center;
-  font-size: 12px;
+  font-size: 11px;
   color: var(--color-muted);
-  padding: 4px 0;
+  padding: 2px 0;
 }
 
 .cal-cell {
-  aspect-ratio: 1 / 1;
+  height: 40px;          /* 固定高度，不再跟着列宽变胖 */
   display: flex;
   align-items: center;
   justify-content: center;
@@ -398,7 +431,7 @@ body {
   color: var(--color-text);
   background: transparent;
   border: none;
-  border-radius: 10px;
+  border-radius: 8px;
 }
 
 .cal-cell.checked {
@@ -422,14 +455,14 @@ body {
 }
 
 .cal-hint {
-  margin-top: 12px;
-  font-size: 13px;
+  margin-top: 8px;
+  font-size: 12px;
   color: var(--color-muted);
 }
 
 /* ---- 历史页：单日详情 ---- */
 .detail-line {
-  padding: 8px 0;
+  padding: 6px 0;
   border-bottom: 1px dashed var(--color-border);
   font-size: 14px;
 }
@@ -449,19 +482,19 @@ body {
 }
 
 #filter-result {
-  margin-top: 6px;
+  margin-top: 4px;
 }
 
 .filter-hint {
-  padding: 8px 0;
-  font-size: 14px;
+  padding: 6px 0;
+  font-size: 13px;
   color: var(--color-muted);
 }
 
 /* ---- 筛选列表：请求失败态（Day 13 四态之一） ---- */
 .filter-error {
-  padding: 8px 0;
-  font-size: 14px;
+  padding: 6px 0;
+  font-size: 13px;
   color: var(--color-danger);
 }
 
@@ -849,6 +882,84 @@ body {
     text-align: center;
   }
 
+  /* 打卡页顶栏例外：返回条和大标题挤在一行更省高度，别各占一整行 */
+  .page-header {
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-start;
+    text-align: left;
+  }
+
+  .page-back {
+    padding: 10px 14px;
+  }
+
+  /* Day 14：手机上整体收紧一档（用户反馈字号偏大、卡片高、要滑很久）。
+     思路是先砍留白（卡片内边距 / 卡片间距 / 顶栏下间距），再降标题和大数字；
+     正文与提示文案保持原大小，别把可读性一起砍掉。 */
+  .container {
+    padding: 16px 12px 32px;
+  }
+
+  .card {
+    padding: 18px;
+    margin-bottom: 12px;
+  }
+
+  .site-header {
+    margin-bottom: 16px;
+  }
+
+  .site-title {
+    font-size: 18px;
+  }
+
+  .card-title {
+    font-size: 16px;
+    margin-bottom: 8px;
+  }
+
+  .goal-text {
+    font-size: 15px;
+  }
+
+  .reminder {
+    padding: 10px 14px;
+    font-size: 13px;
+  }
+
+  .form-row {
+    margin: 14px 0;
+  }
+
+  .form-row label {
+    font-size: 13px;
+  }
+
+  .form-row input,
+  .form-row select,
+  .inline-row select,
+  .inline-row input {
+    padding: 9px 11px;
+    /* 手机上输入框固定 16px：iOS Safari 只要输入框字号小于 16px，
+       聚焦时就会自动放大整个页面（用户会以为页面"炸了"）。这里不能跟着缩。 */
+    font-size: 16px;
+  }
+
+  /* Day 14：历史页在手机上再压一层 —— 日历格子矮一截、统计条更扁平 */
+  .cal-cell {
+    height: 36px;
+  }
+
+  .stats-card,
+  .streak-card {
+    padding: 14px;
+  }
+
+  .stats-card {
+    gap: 18px;
+  }
+
   /* 导航变四项后，窄屏必须允许换行并收紧内边距，否则会横向溢出 */
   .site-nav {
     justify-content: center;
@@ -876,12 +987,12 @@ body {
   }
 
   .streak-num {
-    font-size: 32px;
+    font-size: 28px;   /* Day 14：原 32px，手机上再收一档 */
   }
 
-  /* 健康分大字跟 streak 同档缩小；提示文案按 Day 10 规则提一档到 14px */
+  /* 健康分大字跟 streak 同档缩小；提示文案保持 14px 不改，保证能看清 */
   .diet-score-num {
-    font-size: 32px;
+    font-size: 28px;
   }
 
   .diet-score-hint {

@@ -42,11 +42,21 @@
       </form>
     </section>
 
-    <!-- 已设目标展示：保存后显示，点「改目标」可重新编辑 -->
+    <!-- 已设目标展示 + 目标提醒条（PRD F5）：Day 14 起提醒条并进这张卡，
+         不再单独占一块（少一层滑动，且"差多少"和"目标是什么"本来就该在一起） -->
     <section class="card" id="goal-card" hidden>
       <h2 class="card-title">今日目标</h2>
       <p id="goal-text" class="goal-text"></p>
+      <p class="reminder reminder-in-card" id="reminder-bar" hidden></p>
       <button type="button" class="btn btn-ghost" id="btn-change-goal">改目标</button>
+    </section>
+
+    <!-- 打卡入口卡（Day 14）：本页不再放表单，只报"今天记了没" + 一条去打卡的路。
+         表单搬到了 checkin.html，记完自动跳回本页。 -->
+    <section class="card" id="checkin-entry-card" hidden>
+      <h2 class="card-title">今日打卡</h2>
+      <p class="card-hint" id="checkin-entry-hint"></p>
+      <a class="btn" href="checkin.html" id="checkin-entry-btn">去打卡</a>
     </section>
 
     <!-- streak 大字区（第 4 步）：连续打卡天数 + 历史最长 -->
@@ -59,89 +69,6 @@
         <span class="streak-num" id="streak-longest">0</span>
         <span class="streak-label">历史最长（天）</span>
       </div>
-    </section>
-
-    <!-- 目标提醒条（PRD F5）：未打卡/未达标 → 黄色写差值；达标 → 绿色 -->
-    <p class="reminder" id="reminder-bar" hidden></p>
-
-    <!-- 打卡表单（PRD F2）：设好目标后显示；当天已有记录时回填内容
-         第 5 步去 history.html 搭日历，本页不再加新块 -->
-    <section class="card" id="checkin-card">
-      <h2 class="card-title">今日打卡</h2>
-
-      <form id="checkin-form" novalidate>
-        <!-- 运动：类型 + 时长，卡路里由 calories.js 自动估算 -->
-        <div class="form-row">
-          <label for="exercise-type">今天运动了吗</label>
-          <div class="inline-row">
-            <select id="exercise-type">
-              <option value="">没运动 / 不记</option>
-              <option value="散步">散步</option>
-              <option value="慢跑">慢跑</option>
-              <option value="跳绳">跳绳</option>
-              <option value="骑行">骑行</option>
-              <option value="力量训练">力量训练</option>
-              <option value="瑜伽">瑜伽</option>
-            </select>
-            <input type="number" id="exercise-minutes" min="0" max="600" step="1" placeholder="多少分钟">
-          </div>
-          <p class="field-error" id="exercise-error" hidden></p>
-        </div>
-
-        <!-- 三餐：一句话 + 标签（健康/普通/放纵，只打标签不算热量；分值见 PRD 6.4） -->
-        <div class="form-row">
-          <label for="breakfast-text">早餐吃了什么</label>
-          <input type="text" id="breakfast-text" maxlength="100" placeholder="一句话，比如：鸡蛋 + 牛奶">
-          <div class="tag-group" data-meal="breakfast">
-            <button type="button" class="tag" data-tag="健康">🥗 健康</button>
-            <button type="button" class="tag" data-tag="普通">🍚 普通</button>
-            <button type="button" class="tag" data-tag="放纵">🍔 放纵</button>
-          </div>
-          <p class="field-error" id="breakfast-error" hidden></p>
-        </div>
-
-        <div class="form-row">
-          <label for="lunch-text">午餐吃了什么</label>
-          <input type="text" id="lunch-text" maxlength="100" placeholder="一句话记录">
-          <div class="tag-group" data-meal="lunch">
-            <button type="button" class="tag" data-tag="健康">🥗 健康</button>
-            <button type="button" class="tag" data-tag="普通">🍚 普通</button>
-            <button type="button" class="tag" data-tag="放纵">🍔 放纵</button>
-          </div>
-          <p class="field-error" id="lunch-error" hidden></p>
-        </div>
-
-        <div class="form-row">
-          <label for="dinner-text">晚餐吃了什么</label>
-          <input type="text" id="dinner-text" maxlength="100" placeholder="一句话记录">
-          <div class="tag-group" data-meal="dinner">
-            <button type="button" class="tag" data-tag="健康">🥗 健康</button>
-            <button type="button" class="tag" data-tag="普通">🍚 普通</button>
-            <button type="button" class="tag" data-tag="放纵">🍔 放纵</button>
-          </div>
-          <p class="field-error" id="dinner-error" hidden></p>
-        </div>
-
-        <!-- 体重 + 饮水 -->
-        <div class="form-row">
-          <label for="weight-kg">今天体重（kg）</label>
-          <input type="number" id="weight-kg" min="30" max="200" step="0.1" placeholder="比如 65.5">
-          <p class="field-error" id="weight-error" hidden></p>
-        </div>
-
-        <div class="form-row">
-          <label for="water-ml">今天喝了多少水（ml）</label>
-          <input type="number" id="water-ml" min="0" max="10000" step="1" placeholder="比如 1800">
-          <p class="field-error" id="water-error" hidden></p>
-        </div>
-
-        <p class="field-error" id="checkin-save-error" hidden></p>
-        <button type="submit" class="btn">保存今日打卡</button>
-      </form>
-
-      <!-- 保存后的状态与卡路里结果 -->
-      <p class="checkin-status" id="checkin-status" hidden></p>
-      <p class="calorie-note" id="calorie-note" hidden></p>
     </section>
 
     <!-- 今日饮食健康分（PRD 6.4，2026-09-29）：按三餐标签实时算出，不存进 localStorage -->
@@ -158,9 +85,8 @@
 
 </div>
 
+<!-- 本页只用得上这三个：表单相关的 calories.js / validate.js 已随表单一起搬去 checkin.html -->
 <script src="assets/js/storage.js"></script>
-<script src="assets/js/calories.js"></script>
-<script src="assets/js/validate.js"></script>
 <script src="assets/js/stats.js"></script>
 <script src="assets/js/today.js"></script>
 

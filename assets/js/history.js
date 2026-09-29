@@ -101,7 +101,7 @@
     if (Object.keys(checkins).length === 0) {
       calHint.textContent = '还没有记录，今天先去打一个吧。';
     } else {
-      calHint.textContent = '绿色是打了卡的日子，点一下能看当天详情；还没到的那天点不了。';
+      calHint.textContent = '绿色是打过卡的日子，点一下看当天详情。';
     }
   }
 
@@ -196,11 +196,12 @@
   ];
 
   // 默认态 / 清空恢复：回到「还没选标签」的提示
+  // Day 14：文案改短一行（历史页整体压缩，默认态少占一行高度）
   function showFilterDefault() {
     filterResult.innerHTML = '';
     var p = document.createElement('p');
     p.className = 'filter-hint';
-    p.textContent = '还没选标签，点上面任何一个开始。';
+    p.textContent = '点上面的标签，翻出那天的记录。';
     filterResult.appendChild(p);
   }
 

@@ -1,0 +1,6 @@
+{
+  "name": "api-health",
+  "version": "1.0.0",
+  "description": "健康检查接口：GET /api/health",
+  "main": "index.js"
+}

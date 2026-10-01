@@ -1,0 +1,3 @@
+# 行尾锁定：云函数启动脚本必须保持 LF 行尾
+# 原因：scf_bootstrap 若被转成 CRLF，云端会报 /bin/sh^M: bad interpreter，函数直接启动失败
+cloudfunctions/**/scf_bootstrap text eol=lf

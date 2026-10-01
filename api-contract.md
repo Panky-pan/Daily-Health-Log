@@ -1,12 +1,12 @@
 # API 契约 ·「每日健康打卡」(Daily-Health-Log)
 
-> 版本：v1.0　登记日期：2026-10-01
+> 版本：v1.1　登记日期：2026-10-01
 > 依据文档：PRD.md v1.2、TECH_DESIGN.md v1.4、第 2 周前端成品（welcome / index / checkin / history / trends 五页 + assets 全套 JS）
 > 读者：零基础开发者（Panky）本人，以及未来任何想接手这个项目的人
 >
-> **本文件的状态：只登记，不实现。**
+> **本文件的状态：接口只登记不实现；数据表已落地。**
 > 它是第 3 周建表、写接口的**唯一依据**；代码与本文档冲突时，以本文档为准；要改接口先改这里。
-> 今天（2026-10-01）落地的只有 `GET /api/health` 一个接口（见 4.1），其余全部是占位登记。
+> 今天（2026-10-01）的进度：`GET /api/health` 已上线（见 4.1）；两张表已建成（见 3.4）；其余接口仍是占位登记。
 
 ---
 
@@ -15,7 +15,7 @@
 **它是什么**：前端和后端之间的「对话说明书」。前端照它发请求，后端照它回数据——两边不用互相等，各自照单开发。
 
 **它不是什么**：
-- 不是数据库设计文档的替代品（建表 SQL 在 TECH_DESIGN 3.2，本文档只写"接口看得见的数据形状"）；
+- 不是数据库设计文档的替代品（建表 SQL 已成文件放在 `db/schema.sql`，本文档只写"接口看得见的数据形状"，实现现状另在 3.4 登记）；
 - 不是第 3 周的实现计划（施工顺序在 TECH_DESIGN 3.0）；
 - 不含鉴权细节（本期无账号，鉴权细则等二期登录一起定）。
 
@@ -116,8 +116,8 @@
 
 | 表名 | 一句话角色 | 对应课程案例的表 | 建表 SQL 出处 |
 |---|---|---|---|
-| `checkins` | 每日打卡记录，**一天一条**，覆盖保存 | 案例的 `checkins` | TECH_DESIGN 3.2 |
-| `settings` | 全局目标设置，**只有一条** | 案例的 `plan_days`（"计划/目标"角色） | TECH_DESIGN 3.2 |
+| `checkins` | 每日打卡记录，**一天一条**，覆盖保存 | 案例的 `checkins` | `db/schema.sql`（2026-10-01 已建成） |
+| `settings` | 全局目标设置，**只有一条** | 案例的 `plan_days`（"计划/目标"角色） | `db/schema.sql`（2026-10-01 已建成） |
 
 > **命名说明**：这两张表名沿用 TECH_DESIGN 3.2 已定稿的 SQL（也与课程案例的 `checkins` 同名），本期不另起 `daily_records` / `goal_settings` 之类的新名字——同一个项目里同一个东西只允许一个名字。
 > 你的环境是 **PostgreSQL 模式**（2026-10-01 实测确认），建表走 PG 路线。
@@ -160,6 +160,49 @@
 3. 前端不必操心这条规则，照常提交两个目标值即可。
 
 > 附带发现（不在今天任务范围内，仅记录）：本地版 `today.js` 保存目标时整体覆盖了 `dhl:settings`，会把 `startDate` 抹掉，靠下次打卡再补写。云端契约用上面第 2 条把它从根上解决了——要不要回头修本地版，你定，今天不动手。
+
+### 3.4 数据库实现现状（2026-10-01 建表落地）
+
+建表脚本已生成，位置：
+
+| 文件 | 作用 |
+|---|---|
+| `db/schema.sql` | 建 `checkins` / `settings` 两张表（可重复执行） |
+| `db/seed.sql` | 1 条设置 + 9 条示例数据（可重复执行） |
+| `db/README.md` | 控制台执行步骤 + 5 组验证 SELECT + 报错对照表 |
+
+**实际建成的表与上面 3.2 / 3.3 的差异只有一处，但很关键：**
+
+| 项 | 实际实现 | 为什么这么做 |
+|---|---|---|
+| `user_id` | `BIGINT NOT NULL DEFAULT 0`，本期恒为 0 | 本期不建 `users` 表。**不能允许 NULL**——PG 里 NULL 互不相等，`UNIQUE (user_id, date)` 对 NULL 完全不生效，同一天能插进多条，A6 的 upsert 会静默写出重复记录 |
+| `user_id` 外键 | 本期**不建** | `users` 表属二期，表还不存在，外键加不上 |
+| `settings` 的"只有一条" | `UNIQUE (user_id)` + 默认值 0 | 同上的坑；若 user_id 为 NULL，这条唯一约束同样失效 |
+| 额外的技术列 | `id`（主键）、`created_at`、`updated_at` | 上面两张表只列了业务字段；这三个不参与接口返回 |
+
+**二期接入登录时的收编动作**（把 TECH_DESIGN 3.7 第 7 条落成具体 SQL）：
+
+```sql
+UPDATE checkins SET user_id = <你的 user id> WHERE user_id = 0;
+UPDATE settings SET user_id = <你的 user id> WHERE user_id = 0;
+ALTER TABLE checkins ADD CONSTRAINT checkins_user_fk FOREIGN KEY (user_id) REFERENCES users(id);
+ALTER TABLE settings ADD CONSTRAINT settings_user_fk FOREIGN KEY (user_id) REFERENCES users(id);
+```
+
+**约束清单**（与 3.2 / 3.3 的取值范围逐条对应；数据库是校验的最后一道闸）：
+
+| 表 | 约束名 | 内容 |
+|---|---|---|
+| `checkins` | `checkins_user_date_key` | `UNIQUE (user_id, date)` —— 一天一条，A6 upsert 的前提 |
+| `checkins` | 8 个 CHECK | 运动类型 6 值枚举、时长 0~600、卡路里 0~9999、三餐标签枚举、体重 30~200、饮水 0~10000 |
+| `settings` | `settings_user_key` | `UNIQUE (user_id)` —— 单人只有一条 |
+| `settings` | 2 个 CHECK | 运动目标 1~600、饮水目标 1~10000 |
+
+**空值分工**（对应 2.6）：数据库列存 `NULL`，云函数负责在响应里转成 `""`。**不要往数据库里写空字符串**——数值列是 INTEGER / NUMERIC 类型，本来也存不下。
+
+**`start_date` 永不覆盖**：这是云函数的逻辑，故意**没有写数据库触发器**。触发器会把业务规则藏进数据库、出错时难排查；规则留在写接口的代码里，一眼能看到。
+
+**索引**：只依赖 `UNIQUE (user_id, date)` 自带的索引，不额外建。单人一年 365 行，全表扫描是毫秒级；等数据量真的上来了再按实际慢查询补。
 
 ---
 
@@ -383,7 +426,7 @@
 ```
 
 - `isNew: true` = 新建（页面显示「今日已打卡 ✓」）；`false` = 覆盖了原有记录（显示「已更新今日记录」，PRD E6）；
-- 实现要点：`INSERT ... ON CONFLICT (user_id, date) DO UPDATE`，一条 SQL 完成覆盖保存（TECH_DESIGN 3.0 第 ④ 步）。
+- 实现要点：`INSERT ... ON CONFLICT (user_id, date) DO UPDATE`，一条 SQL 完成覆盖保存（TECH_DESIGN 3.0 第 ④ 步）。本期 `user_id` 写固定值 `0`（见 3.4），冲突键 `(user_id, date)` 才能命中唯一约束；若写成 NULL，冲突不会发生，会插出重复记录。
 
 **错误返回**：400 `VALIDATION_ERROR`（带 `field`）、500 `DB_ERROR` / `INTERNAL_ERROR`。
 **不做**：不允许删除某天记录（PRD 无此功能），不提供 DELETE。
@@ -445,7 +488,7 @@
 
 | # | 事项 | 依据 | 备注 |
 |---|---|---|---|
-| 1 | 在 PostgreSQL 里建 `checkins` / `settings` 两张表 | TECH_DESIGN 3.2 的 SQL | 你的环境是 PG 模式，已确认 |
+| 1 | 在 PostgreSQL 里建 `checkins` / `settings` 两张表 | `db/schema.sql` | **已完成（2026-10-01）**：脚本与示例数据已生成，执行步骤、验证 SELECT、报错对照见 `db/README.md` |
 | 2 | 写 A2/A3/A4/A5/A6 五个接口（A7 可延后） | 本文档第四节 | 建议顺序：A4 读 → A6 写 → A2/A3（TECH_DESIGN 3.0 ③④） |
 | 3 | 把 `api-health` 的错误分支形状统一成 `{ok:false,error:{code,message}}` | 本文档 2.2 | 现状是 `{"ok":false,"error":"Method Not Allowed"}`（字符串），功能正常，只是形状不统一 |
 | 4 | 前端接接口：换掉 `state.js` 的模拟取数 | 本文档 4.5 末注 | 单点改造，`history.js` 不动 |
@@ -459,6 +502,7 @@
 | 版本 | 日期 | 改动 |
 |---|---|---|
 | v1.0 | 2026-10-01 | 初稿登记：7 个接口（1 个已上线）、2 张表、统一响应与错误形状、页面映射表、"不做"清单 |
+| v1.1 | 2026-10-01 | **数据模型落地**：新增 3.4「数据库实现现状」（`user_id` 定为 `NOT NULL DEFAULT 0` 及原因、二期收编 SQL、约束清单、空值分工、`start_date` 不写触发器、索引取舍）；3.1 建表出处改为 `db/schema.sql`；4.7 补 `user_id` 固定 0 的实现要点；第七节第 1 项标记完成 |
 
 ---
 

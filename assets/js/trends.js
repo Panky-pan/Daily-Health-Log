@@ -123,8 +123,13 @@
 
   /* ---- 初始化 ---- */
 
-  var checkins = window.dhlStorage.getCheckins();
-  var today = window.dhlStats.formatDate(new Date());
-  renderWeightChart(checkins);
-  renderExerciseChart(checkins, today);
+  function init() {
+    var checkins = window.dhlStorage.getCheckins();
+    var today = window.dhlStats.formatDate(new Date());
+    renderWeightChart(checkins);
+    renderExerciseChart(checkins, today);
+  }
+
+  // Day 17：先等云端数据取回来再画图（取不到会自动回落本地数据，不会白屏）
+  if (window.dhlApi) { window.dhlApi.ready(init); } else { init(); }
 })();

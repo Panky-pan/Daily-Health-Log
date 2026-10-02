@@ -11,6 +11,12 @@
    一次性迁移（2026-09-29）：
    三餐标签由「清爽/标准/丰盛」改为「健康/普通/放纵」（PRD 6.4）。
    老用户第一次打开任意页面时自动转换一次，细节见 migrateIfNeeded()。
+
+   云端覆盖层（Day 17 新增，2026-10-02）：
+   接口接通后，**读**走云端的真库数据（由 api-source.js 取回后调 applyRemote 放进来），
+   **写**暂时还在本地（业务写入接口排在 Day 18）。
+   云端取不到时（applyRemote 没被调用过）自动回落到本地数据，页面不会白屏。
+   注意：本地数据**只读不改**——覆盖层只在内存里，不写 localStorage，绝不覆盖你的老数据。
    ============================================ */
 
 (function () {
@@ -138,9 +144,29 @@
     }
   }
 
+  /* ---- 云端覆盖层（Day 17 新增） ---- */
+  // null = 还没取到云端数据（页面就用本地数据）；取到后读操作优先走这里。
+  // 只在内存里，不写 localStorage —— 你的本地老数据一个字节都不会被动。
+  var remote = null;
+
+  /**
+   * 把 api-source.js 取回的云端数据放进覆盖层。
+   * @param {Object|null} settings 云端目标设置（A2），null = 云端还没设置过
+   * @param {Object} checkins 以日期为 key 的打卡记录表（A4 的 items 转过来的）
+   */
+  function applyRemote(settings, checkins) {
+    remote = { settings: settings, checkins: checkins || {} };
+  }
+
+  // 数据是不是来自云端（页面/控制台自查用）
+  function isRemote() {
+    return remote !== null;
+  }
+
   /* ---- settings：全局目标设置（PRD 6.2） ---- */
   // 读设置；没有返回 null（调用方据此判断“首次使用”→ 显示设置表单）
   function getSettings() {
+    if (remote) return remote.settings;
     return read(KEYS.settings, null);
   }
 
@@ -152,7 +178,20 @@
   /* ---- checkins：单日打卡记录 ---- */
   // 读全部打卡记录，返回 { "2026-09-22": {...}, ... }；没有返回空对象
   function getCheckins() {
-    return read(KEYS.checkins, {});
+    var local = read(KEYS.checkins, {});
+    if (!remote) return local;
+
+    // 云端覆盖层生效时的合并规则：**以云端为准**，本地独有的日期保留。
+    // 为什么保留本地的：本期只接了读接口，写还在本地（Day 18 才接 PUT），
+    // 刚在打卡页保存的那天若不保留，一刷新就“消失”，看起来像丢数据。
+    var merged = {};
+    Object.keys(local).forEach(function (date) {
+      merged[date] = local[date];
+    });
+    Object.keys(remote.checkins).forEach(function (date) {
+      merged[date] = remote.checkins[date];
+    });
+    return merged;
   }
 
   /**
@@ -184,6 +223,8 @@
     getSettings: getSettings,
     saveSettings: saveSettings,
     getCheckins: getCheckins,
-    saveCheckin: saveCheckin
+    saveCheckin: saveCheckin,
+    applyRemote: applyRemote,
+    isRemote: isRemote
   };
 })();

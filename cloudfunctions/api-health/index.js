@@ -41,6 +41,9 @@ const USER_ID = 0;
 // A4 的区间保护：一次最多查 400 天（契约 4.5 / TECH_DESIGN B6）
 const MAX_RANGE_DAYS = 400;
 
+// A4 的条数上限：limit 参数的取值范围（契约 4.5）
+const MAX_LIMIT = 1000;
+
 // 错误码字典：前端按 code 分支，message 是给人看的中文口语短句（契约 2.2 / 2.3）
 const ERR = {
   INVALID_PARAM: "INVALID_PARAM",
@@ -50,10 +53,16 @@ const ERR = {
   INTERNAL_ERROR: "INTERNAL_ERROR",
 };
 
-// CORS 响应头：先放开所有来源，浏览器前端调接口时才不会被跨域拦住；
-// 原生 APP（Flutter）没有跨域概念，不受此影响。
+// CORS 响应头。
+//
+// 注意（2026-10-02 实测踩坑）：**不要自己写 "Access-Control-Allow-Origin"**。
+// CloudBase 的 HTTP 网关（响应头里 server: tcbgw）会自己回跨域头，并且回的是
+//   access-control-allow-credentials: true
+//   access-control-allow-origin: <请求的 Origin>
+// 我们若再写一个 "*"，网关会把两者拼成 "http://xxx,*"（带 credentials 时 Allow-Origin
+// 不允许是 "*"，更不允许逗号多值）→ 浏览器判定跨域失败，前端报 "Failed to fetch"。
+// 所以这里只保留方法/请求头两项，Allow-Origin 交给网关。
 const CORS_HEADERS = {
-  "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type",
 };
@@ -252,17 +261,36 @@ async function handleListCheckins(res, params) {
     return sendFail(res, 400, ERR.INVALID_PARAM, `一次最多查 ${MAX_RANGE_DAYS} 天的记录`);
   }
 
-  // 参数化：日期是作为「结构化参数」传给 SDK 的，不会被拼进查询语句，
-  // 所以 from / to 里塞什么都改不了查询本身（这就是防注入）。
+  // limit 校验（同样放在查库之前）
+  const limitRaw = params.get("limit");
+  let limit = null;
+  if (limitRaw !== null) {
+    if (!/^\d+$/.test(limitRaw)) {
+      return sendFail(res, 400, ERR.INVALID_PARAM, "limit 要填正整数，比如 30");
+    }
+    limit = Number(limitRaw);
+    if (limit < 1 || limit > MAX_LIMIT) {
+      return sendFail(res, 400, ERR.INVALID_PARAM, `limit 取值范围是 1~${MAX_LIMIT}`);
+    }
+  }
+
+  // 参数化：日期和条数都是作为「结构化参数」传给 SDK 的，不会被拼进查询语句，
+  // 所以 from / to / limit 里塞什么都改不了查询本身（这就是防注入）。
   let query = getDb().from("checkins").select("*").eq("user_id", USER_ID);
   if (from) query = query.gte("date", from);
   if (to) query = query.lte("date", to);
 
-  // 升序：趋势图直接按顺序连线（契约 4.5）
-  const { data, error } = await query.order("date", { ascending: true });
+  // 带 limit 时先倒序取「最新 N 条」，下面再翻回升序 —— 这样 ?limit=30 才等于直觉里的「最近 30 天」。
+  // 不带 limit 直接升序（趋势图按顺序连线，契约 4.5 的硬约定）。
+  let ordered = query.order("date", { ascending: limit === null });
+  if (limit !== null) ordered = ordered.limit(limit);
+
+  const { data, error } = await ordered;
   if (error) return sendDbError(res, "GET /api/checkins", error);
 
   const items = (Array.isArray(data) ? data : []).map(checkinToApi);
+  // 翻回升序，保证对外 items 永远从早到晚
+  if (limit !== null) items.reverse();
   // 没有记录时回空数组 + total: 0，这是正常状态不是错误（契约 4.5）
   return sendOk(res, { items, total: items.length });
 }

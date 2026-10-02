@@ -1,0 +1,92 @@
+/* ============================================
+   api-source.js —— 前端取数层（Day 17 新增）
+   ------------------------------------------------------------
+   干什么：页面打开时去云端的两个读接口取一次真实数据，取到后
+   交给 storage.js 的「云端覆盖层」，页面照旧从 dhlStorage 读数。
+
+   为什么要单独一层（而不是各页面各写一遍 fetch）：
+   1. storage.js 是全项目唯一的数据出入口（它自己的文件头就是这么写的），
+      把云端数据放在它底下，**所有页面自动都读到了真实数据**；
+   2. 两个接口并发只要发一次（load() 复用同一个 Promise）；
+   3. 取不到时**不白屏**：只打一条控制台警告，页面继续用本地数据渲染
+      （沿用 PRD E2「数据异常也不报错不白屏」的思路）。
+
+   接口契约：api-contract.md 4.3（A2 /api/settings）、4.5（A4 /api/checkins）。
+   字段已经是 camelCase，与页面直接对接，不需要再转换。
+   ============================================ */
+
+(function () {
+  'use strict';
+
+  // 线上接口地址（api-contract.md 2.1 的 API_BASE）
+  var API_BASE = 'https://daily-health-log-d3eej7197499a30-1499041418.ap-shanghai.app.tcloudbase.com';
+
+  var loading = null;  // 复用的 Promise：多个页面脚本同时 ready() 也只发一次请求
+  var result = null;   // 最近一次取数的结果，供页面/控制台查看
+
+  /**
+   * 取一个接口并剥掉 {ok,data} 外壳。
+   * 失败时抛错（由 load() 统一兜底），错误信息优先用契约里的中文 message。
+   */
+  function fetchJson(path) {
+    return fetch(API_BASE + path).then(function (res) {
+      return res.json().then(function (body) {
+        if (!res.ok || !body || body.ok !== true) {
+          var msg = (body && body.error && body.error.message) || ('HTTP ' + res.status);
+          throw new Error(msg);
+        }
+        return body.data;
+      });
+    });
+  }
+
+  /**
+   * 取云端数据（只取一次）。
+   * @returns {Promise<{ok: boolean, count?: number, reason?: string}>}
+   *   永远 resolve，不 reject —— 调用方不需要写 catch。
+   */
+  function load() {
+    if (loading) return loading;
+
+    loading = Promise.all([
+      fetchJson('/api/settings'),
+      fetchJson('/api/checkins?limit=400')  // 契约 4.5：一次最多 400 天，够单人一年
+    ])
+      .then(function (both) {
+        var settings = both[0].settings;   // 可能是 null（没设置过目标）
+        var items = both[1].items || [];
+
+        // A4 返回的是数组，而页面要的是「以日期为 key 的对象」（沿用本地存储的形状）
+        var records = {};
+        items.forEach(function (item) {
+          if (item && item.date) records[item.date] = item;
+        });
+
+        window.dhlStorage.applyRemote(settings, records);
+        result = { ok: true, count: items.length };
+        return result;
+      })
+      .catch(function (e) {
+        console.warn('[api-source] 云端数据取不到，本次用本地数据渲染：', e && e.message);
+        result = { ok: false, reason: (e && e.message) || 'unknown' };
+        return result;
+      });
+
+    return loading;
+  }
+
+  /**
+   * 页面启动入口：数据取完（不管成功失败）再跑 callback。
+   * 页面脚本把结尾的 init() 换成 dhlApi.ready(init) 即可，内部逻辑一行不用改。
+   */
+  function ready(callback) {
+    load().then(callback);
+  }
+
+  window.dhlApi = {
+    API_BASE: API_BASE,
+    load: load,
+    ready: ready,
+    getResult: function () { return result; }
+  };
+})();

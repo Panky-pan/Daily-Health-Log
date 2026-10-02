@@ -235,5 +235,6 @@
     }
   }
 
-  init();
+  // Day 17：先等云端数据取回来再回填表单（取不到会自动回落本地数据，不会白屏）
+  if (window.dhlApi) { window.dhlApi.ready(init); } else { init(); }
 })();

@@ -1,6 +1,6 @@
 # API 契约 ·「每日健康打卡」(Daily-Health-Log)
 
-> 版本：v1.2　登记日期：2026-10-01　最近更新：2026-10-02
+> 版本：v1.4　登记日期：2026-10-01　最近更新：2026-10-02
 > 依据文档：PRD.md v1.2、TECH_DESIGN.md v1.4、第 2 周前端成品（welcome / index / checkin / history / trends 五页 + assets 全套 JS）
 > 读者：零基础开发者（Panky）本人，以及未来任何想接手这个项目的人
 >
@@ -104,9 +104,16 @@
 - 数值字段（分钟 / 卡路里 / 体重 / 饮水）→ 有值时返回 **number**，没值时返回 `""`；
 - 三餐标签未选 → `""`（枚举值为纯文字「健康 / 普通 / 放纵」，不带图标，PRD 6.4）。
 
-### 2.7 CORS
+### 2.7 CORS（2026-10-02 实测修正）
 
-原生 APP 没有跨域概念，CORS 只影响浏览器。本期前端尚未接接口，先不处理；第 3 周浏览器发起请求时若被拦，在云函数响应头放行静态托管域名（TECH_DESIGN 3.0 第 ⑦ 步）。
+原生 APP 没有跨域概念，CORS 只影响浏览器。
+
+**结论：跨域头由 CloudBase HTTP 网关自己回，云函数不要自己写 `Access-Control-Allow-Origin`。**
+
+网关（响应头 `server: tcbgw`）会回 `access-control-allow-credentials: true` 与 `access-control-allow-origin: <请求的 Origin>`；云函数若再写一个 `*`，网关会拼成 `http://xxx,*` 这种非法多值（带 `credentials: true` 时 `Allow-Origin` 不允许是 `*`，更不允许逗号多值），浏览器直接判跨域失败，前端只看到 `Failed to fetch`。
+
+现状：云函数只保留 `Allow-Methods` / `Allow-Headers`，`Allow-Origin` 交给网关；实测四个页面均能正常取数。
+**原计划"放行静态托管域名"的做法作废**——不需要白名单，网关按请求来源回显。
 
 ---
 
@@ -319,9 +326,12 @@ ALTER TABLE settings ADD CONSTRAINT settings_user_fk FOREIGN KEY (user_id) REFER
 |---|---|---|
 | `from` | `YYYY-MM-DD` | 起始日期（含）。不传 = 不设下界 |
 | `to` | `YYYY-MM-DD` | 结束日期（含）。不传 = 不设上界 |
-| 两者都不传 | — | 返回**全部记录**（单人数据量可控：一年 365 条约 100KB，前端一次拉完、本地算，比"每页各查一次"更省事） |
+| `limit` | 正整数 1~1000 | **返回条数上限**，取区间内**最新**的 N 条（2026-10-02 新增）。不传 = 不限条数 |
+| 三者都不传 | — | 返回**全部记录**（单人数据量可控：一年 365 条约 100KB，前端一次拉完、本地算，比"每页各查一次"更省事） |
 
-**校验**：日期格式非法 → 400 `INVALID_PARAM`；`from` 晚于 `to` → 400 `INVALID_PARAM`；区间跨度超过 400 天 → 400 `INVALID_PARAM`（TECH_DESIGN B6 的保护值）。
+**校验**：日期格式非法 → 400 `INVALID_PARAM`；`from` 晚于 `to` → 400 `INVALID_PARAM`；区间跨度超过 400 天 → 400 `INVALID_PARAM`（TECH_DESIGN B6 的保护值）；`limit` 非正整数或超出 1~1000 → 400 `INVALID_PARAM`。
+
+> `limit` 的语义是「**最新 N 条**」而不是「最早 N 条」：带上 `limit` 时先倒序取 N 条，再翻回升序返回，所以**响应里的 `items` 永远是升序**（趋势图照旧直接连线）。例：`?limit=3` 取到 09-28 / 09-29 / 10-01。
 
 **成功响应**（200）：`items` 按 `date` **升序**排列（趋势图直接按顺序连线）。
 
@@ -358,7 +368,10 @@ ALTER TABLE settings ADD CONSTRAINT settings_user_fk FOREIGN KEY (user_id) REFER
 > 状态：✅ 已实现（2026-10-02）。验证：浏览器依次打开 `<API_BASE>/api/checkins`（9 条）、`<API_BASE>/api/checkins?from=2026-09-27&to=2026-10-01`（3 条）、`<API_BASE>/api/checkins?from=2026-10-01&to=2026-09-01`（400）。
 > 实现细节（含一条契约没写但代码里做了的固定过滤 `.eq("user_id", 0)`）见 **4.9**。
 
-> **前端对接点**：第 2 周的 `assets/js/state.js` 里 `fetchList(producer)` 已经约定了"返回 Promise，成功 `resolve({items})`、失败 `reject`"。第 3 周把这个文件的 `setTimeout` 换成对这个接口的 `fetch`，**`history.js` 一行都不用改**——这就是当初留这个函数的意义。
+> **前端对接点（2026-10-02 已接）**：实际改的**不是** `state.js`。第 2 周留的 `fetchList(producer)` 那套设计是对的（页面只管拿 `{items}`），但真正决定"数据从哪来"的是更底层的 `assets/js/storage.js`——它是全项目唯一的数据出入口。在它底下加一层「**云端覆盖层**」后，**所有页面自动读到真库数据**，页面脚本一行未改。
+> - 新增取数层 `assets/js/api-source.js`：并发调 A2 + A4，取到的数据交给 `storage.js` 的 `applyRemote()`；**取不到就回落本地数据、不白屏**。
+> - 四个页面只在结尾把 `init()` 换成 `dhlApi.ready(init)`（各一行）；`state.js` / `history.js` / `stats.js` 完全没动。
+> - **本期只接了读，写还在本地**（A6 排在 Day 18）。因此 `getCheckins()` 采用「云端为准 + 本地独有的日期保留」的合并规则，避免刚在打卡页保存的那天刷新后"消失"。
 > **筛选说明**：按饮食标签筛选（历史页 Day 12 功能）**不单独做接口**，由前端拿到记录后本地扫描（`history.js` 的 `scanFilterHits` 逻辑照旧）。单人数据量下服务端筛没有收益，反而多一套语义要维护。
 
 ---
@@ -489,12 +502,13 @@ ALTER TABLE settings ADD CONSTRAINT settings_user_fk FOREIGN KEY (user_id) REFER
 | 凭证 | 云函数环境变量 `CLOUDBASE_APIKEY`（**只进环境变量，永不进代码 / 仓库 / 响应**） |
 | 凭证类型 | 环境的 **Publishable Key**（对应数据库角色 `anon`） |
 
-**四个踩过的结论（照抄即可，别再试错）**：
+**五个踩过的结论（照抄即可，别再试错）**：
 
 1. **`app.rdb()` 必须显式传 `database: "public"`**。不传时 SDK 内部按 `const { database = envId } = options` 把**环境 ID 当 schema 名**发出去，网关回 `406 DATABASE_PGRST106 Invalid schema`。
 2. **通过工具通道创建的 `api_key` 类型凭证被 PG 网关拒收**（`401 INVALID_CREDENTIALS`；对照：不带凭证是 `MISSING_CREDENTIALS`，说明请求头送达了）。同一请求改带 Publishable Key 立刻 `200`。→ 本期读接口就用 Publishable Key。**二期启用登录 + RLS 时必须重定凭证策略**（读接口应转发调用方 token，或改用控制台创建的服务端 Key）。
 3. **凭证失效时 SDK 会在「后台」抛未处理的 Promise 拒绝**，Node 默认直接杀进程 → 平台回 HTML 错误页，违背 2.3。云函数顶部已加进程级 `unhandledRejection` 兜底，只记日志不退出。
 4. **查询固定带 `.eq("user_id", 0)`**（契约 4.5 未写此参数）：本期单人数据恒为 0，写死一处便于二期多人版收编。
+5. **跨域头千万别自己写 `Access-Control-Allow-Origin`**：网关会把它和请求来源拼成非法多值，浏览器报 `Failed to fetch`（详见 2.7）。前端本地起服务（`python -m http.server`）从 `http://127.0.0.1:xxxx` 访问接口时才会暴露这个问题——**直连 URL 看不出来，必须在页面里才测得出来**。
 
 **接口是实时查库、没有缓存**：改一条数据，下次请求立刻反映。验证闭环（2026-10-02 实测通过）：
 
@@ -514,6 +528,8 @@ ALTER TABLE settings ADD CONSTRAINT settings_user_fk FOREIGN KEY (user_id) REFER
 | `<API_BASE>/api/checkins` | 200，`total: 9`，`date` 升序 |
 | `<API_BASE>/api/checkins?from=2026-09-27&to=2026-10-01` | 200，3 条 |
 | `<API_BASE>/api/checkins?from=2026-10-01&to=2026-09-01` | 400 `INVALID_PARAM` |
+| `<API_BASE>/api/checkins?limit=3` | 200，3 条（最新 3 天：09-28 / 09-29 / 10-01），仍为升序 |
+| `<API_BASE>/api/checkins?limit=0` | 400 `INVALID_PARAM` |
 | `<API_BASE>/api/checkins/2026-09-21` | 404 `NOT_FOUND`（A5 未实现，属预期） |
 
 **部署方式**：改写 `cloudfunctions/api-health/` 下的代码后，重新上传该函数目录（依赖 `node_modules` 随包或由平台安装均可，函数已开 `InstallDependency`）。**改完代码必须重新部署，只改本地文件线上不会变。**
@@ -533,6 +549,8 @@ ALTER TABLE settings ADD CONSTRAINT settings_user_fk FOREIGN KEY (user_id) REFER
 | `trends.html` 趋势页 | 全部记录 | A4 | 体重折线、周运动柱状（近 4~8 周） |
 
 **一次取数原则**：每页加载时并发调 A2 + A4 即可满足全部展示需求，**不要**为"日历""趋势""筛选"各写一个接口。
+
+**接入进度（2026-10-02）**：四个页面的**读**已接上（每页并发调 A2 + A4），打开即显示云端数据；`welcome.html` 仍不调接口。
 
 ---
 
@@ -557,7 +575,7 @@ ALTER TABLE settings ADD CONSTRAINT settings_user_fk FOREIGN KEY (user_id) REFER
 | 1 | 在 PostgreSQL 里建 `checkins` / `settings` 两张表 | `db/schema.sql` | **已完成（2026-10-01）**：脚本与示例数据已生成，执行步骤、验证 SELECT、报错对照见 `db/README.md` |
 | 2 | 写 A2/A3/A4/A5/A6 五个接口（A7 可延后） | 本文档第四节 | **部分完成（2026-10-02）**：A4 `GET /api/checkins`、A2 `GET /api/settings` 已上线（见 4.9）；剩余顺序：A6 写 → A3 → A5 |
 | 3 | 把 `api-health` 的错误分支形状统一成 `{ok:false,error:{code,message}}` | 本文档 2.2 | **已完成（2026-10-02）**：404 / 405 / 400 / 500 全部统一；A1 的成功响应形状按 2.2 的例外保持不变 |
-| 4 | 前端接接口：换掉 `state.js` 的模拟取数 | 本文档 4.5 末注 | 单点改造，`history.js` 不动 |
+| 4 | 前端接接口：页面读真库数据 | 本文档 4.5 末注 | **已完成（2026-10-02）**：改的是 `storage.js`（加云端覆盖层）+ 新增 `api-source.js`，四个页面各改一行启动方式；`state.js` / `history.js` / `stats.js` 未动。**写入接口仍待 Day 18** |
 | 5 | 处理 CORS（浏览器首次发请求时） | 本文档 2.7 | **已具备（2026-10-02）**：云函数响应头已带 `Access-Control-Allow-Origin: *` 并放行 OPTIONS 预检；前端真正发起跨域请求时若仍被拦，再按 2.7 收紧白名单 |
 | 6 | 本地数据迁移：导出 → A7 导入 → 人工核对 | TECH_DESIGN 3.7 | 程序**永不**自动清本地数据 |
 
@@ -570,6 +588,8 @@ ALTER TABLE settings ADD CONSTRAINT settings_user_fk FOREIGN KEY (user_id) REFER
 | v1.0 | 2026-10-01 | 初稿登记：7 个接口（1 个已上线）、2 张表、统一响应与错误形状、页面映射表、"不做"清单 |
 | v1.1 | 2026-10-01 | **数据模型落地**：新增 3.4「数据库实现现状」（`user_id` 定为 `NOT NULL DEFAULT 0` 及原因、二期收编 SQL、约束清单、空值分工、`start_date` 不写触发器、索引取舍）；3.1 建表出处改为 `db/schema.sql`；4.7 补 `user_id` 固定 0 的实现要点；第七节第 1 项标记完成 |
 | v1.2 | 2026-10-02 | **A2 / A4 已实现并上线**：新增 **4.9「接口实现现状」**（云函数单入口路由表、网关 `/api` 前缀路由与 `INVALID_PATH` 排查法、SDK 必填 `database: "public"`、凭证改用 Publishable Key 及 `api_key` 被网关拒收的实测结论、`unhandledRejection` 兜底、`user_id` 固定过滤、实时查库验证闭环、线上验证清单、部署方式）；2.1 基地址说明更新为 `/api` 前缀路由；4.2 补 A1 错误形状已统一；4.3 / 4.5 补状态与验证地址；4.1 总表状态更新；第七节第 2 / 3 / 5 项更新 |
+| v1.3 | 2026-10-02 | **A4 新增 `limit` 查询参数**（返回条数上限，取最新 N 条、响应仍升序，取值 1~1000，越界与非数字均 400）；4.5 参数表与校验规则同步；4.9 验证清单补两条 |
+| v1.4 | 2026-10-02 | **前端接接口完成**（契约 4.5 末注、第七节第 4 项）：新增取数层 `assets/js/api-source.js`，`storage.js` 加「云端覆盖层」（只走内存、不覆盖本地数据），四个页面各改一行启动方式；**2.7 CORS 按实测重写**（云函数不要自写 `Allow-Origin`，网关会拼成非法多值导致 `Failed to fetch`）；4.9 补第 5 条结论；页面映射表补接入进度；四个页面 + 开屏页页脚文案由「数据只存在浏览器里」改为「页面记录来自云端；新打卡先存在本机」 |
 
 ---
 

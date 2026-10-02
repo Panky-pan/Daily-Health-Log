@@ -1,12 +1,12 @@
 # API 契约 ·「每日健康打卡」(Daily-Health-Log)
 
-> 版本：v1.1　登记日期：2026-10-01
+> 版本：v1.2　登记日期：2026-10-01　最近更新：2026-10-02
 > 依据文档：PRD.md v1.2、TECH_DESIGN.md v1.4、第 2 周前端成品（welcome / index / checkin / history / trends 五页 + assets 全套 JS）
 > 读者：零基础开发者（Panky）本人，以及未来任何想接手这个项目的人
 >
-> **本文件的状态：接口只登记不实现；数据表已落地。**
+> **本文件的状态：读接口已实现，写接口待实现。**
 > 它是第 3 周建表、写接口的**唯一依据**；代码与本文档冲突时，以本文档为准；要改接口先改这里。
-> 今天（2026-10-01）的进度：`GET /api/health` 已上线（见 4.1）；两张表已建成（见 3.4）；其余接口仍是占位登记。
+> 进度（2026-10-02）：**A2 `GET /api/settings`、A4 `GET /api/checkins` 已上线**（实现细节见 4.9）；两张表已建成（见 3.4）；A1 保留；A3 / A5 / A6 / A7 仍是占位登记。
 
 ---
 
@@ -41,10 +41,10 @@
 
 | 项 | 值 | 说明 |
 |---|---|---|
-| 云函数 HTTP 访问地址 | `https://daily-health-log-d3eej7197499a30-1499041418.ap-shanghai.app.tcloudbase.com` | 2026-10-01 已开通，目前只有 `/api/health` 一条路由 |
+| 云函数 HTTP 访问地址 | `https://daily-health-log-d3eej7197499a30-1499041418.ap-shanghai.app.tcloudbase.com` | 2026-10-01 开通；2026-10-02 起网关路由放宽为 **`/api`（前缀匹配 + 路径透传）**，所有 `/api/...` 都由同一个云函数 `api-health` 处理 |
 | 本文件中的写法 | `<API_BASE>/api/...` | 路径一律以 `/api` 开头 |
 
-第 3 周新增的接口挂到同一域名下的新路由（或同一个函数内按路径分发，见 TECH_DESIGN 3.3 的"单入口"结论）。
+新增接口**不用再动网关**：网关只保留一条 `/api` 前缀路由，新接口在云函数里加一条路径分支即可（TECH_DESIGN 3.3 的"单入口"结论，2026-10-02 已按此实现）。
 
 ### 2.2 响应形状（成功 / 失败两种）
 
@@ -213,12 +213,14 @@ ALTER TABLE settings ADD CONSTRAINT settings_user_fk FOREIGN KEY (user_id) REFER
 | 编号 | 方法 | 路径 | 用途 | 状态 |
 |---|---|---|---|---|
 | A1 | GET | `/api/health` | 健康检查 | **已上线（2026-10-01）** |
-| A2 | GET | `/api/settings` | 读目标设置 | 登记待实现 |
+| A2 | GET | `/api/settings` | 读目标设置 | **已实现（2026-10-02）** |
 | A3 | PUT | `/api/settings` | 存 / 改目标设置 | 登记待实现 |
-| A4 | GET | `/api/checkins` | **列表读取**：按日期区间取打卡记录（不传参＝取全部） | 登记待实现 |
+| A4 | GET | `/api/checkins` | **列表读取**：按日期区间取打卡记录（不传参＝取全部） | **已实现（2026-10-02）** |
 | A5 | GET | `/api/checkins/{date}` | 读单日记录 | 登记待实现 |
 | A6 | PUT | `/api/checkins/{date}` | 保存 / 覆盖单日记录（upsert） | 登记待实现 |
 | A7 | POST | `/api/checkins/import` | 批量导入（本地数据迁移专用） | 登记待实现，**可延后** |
+
+> A2 / A4 的实现方式、凭证与踩坑记录见 **4.9**。
 
 > A4 就是"列表读取接口"这个角色位（对应课程案例的 `GET /api/favorites`）：历史页的筛选列表、日历、趋势图全靠它一次取数。
 
@@ -234,7 +236,10 @@ ALTER TABLE settings ADD CONSTRAINT settings_user_fk FOREIGN KEY (user_id) REFER
 { "ok": true, "service": "daily-health-log-demo", "time": "2026-10-01 20:59:25" }
 ```
 
-**错误返回**：方法不对 → 405 `{"ok":false,"error":"Method Not Allowed"}`（现有实现为简化字符串，形状统一留到第 3 周，见第七节）。
+**错误返回**：方法不对 → 405 `{"ok":false,"error":{"code":"METHOD_NOT_ALLOWED","message":"这个地址不支持 POST 请求"}}`
+（2026-10-02 已按第七节第 3 项统一成 2.2 的形状；**成功响应仍是本契约唯一的例外**，不带 `data` 包裹。）
+
+> 状态：✅ 已上线（2026-10-01）。验证：浏览器打开 `<API_BASE>/api/health`。
 
 ---
 
@@ -262,6 +267,8 @@ ALTER TABLE settings ADD CONSTRAINT settings_user_fk FOREIGN KEY (user_id) REFER
 > 为什么不返回 404：前端需要区分"没设置过"（显示设置表单）和"请求出错"（显示错误态）。用 200 + null 表达"没有"，前端一个判断就够，不必把正常业务状态塞进错误分支。
 
 **错误返回**：500 `DB_ERROR` / `INTERNAL_ERROR`。
+
+> 状态：✅ 已实现（2026-10-02）。验证：浏览器打开 `<API_BASE>/api/settings`，当前返回 `30 / 2000 / 2026-09-21`。
 
 ---
 
@@ -347,6 +354,9 @@ ALTER TABLE settings ADD CONSTRAINT settings_user_fk FOREIGN KEY (user_id) REFER
 - `total` 是本次返回条数，方便前端日志与调试时一眼核对。
 
 **错误返回**：400 `INVALID_PARAM`、500 `DB_ERROR` / `INTERNAL_ERROR`。
+
+> 状态：✅ 已实现（2026-10-02）。验证：浏览器依次打开 `<API_BASE>/api/checkins`（9 条）、`<API_BASE>/api/checkins?from=2026-09-27&to=2026-10-01`（3 条）、`<API_BASE>/api/checkins?from=2026-10-01&to=2026-09-01`（400）。
+> 实现细节（含一条契约没写但代码里做了的固定过滤 `.eq("user_id", 0)`）见 **4.9**。
 
 > **前端对接点**：第 2 周的 `assets/js/state.js` 里 `fetchList(producer)` 已经约定了"返回 Promise，成功 `resolve({items})`、失败 `reject`"。第 3 周把这个文件的 `setTimeout` 换成对这个接口的 `fetch`，**`history.js` 一行都不用改**——这就是当初留这个函数的意义。
 > **筛选说明**：按饮食标签筛选（历史页 Day 12 功能）**不单独做接口**，由前端拿到记录后本地扫描（`history.js` 的 `scanFilterHits` 逻辑照旧）。单人数据量下服务端筛没有收益，反而多一套语义要维护。
@@ -454,6 +464,62 @@ ALTER TABLE settings ADD CONSTRAINT settings_user_fk FOREIGN KEY (user_id) REFER
 
 ---
 
+### 4.9 接口实现现状（2026-10-02）
+
+> 本节记录「代码到底怎么写的」，供后来接手的人排查；**接口形状仍以 4.2~4.8 为准**。
+
+**云函数**：`cloudfunctions/api-health/`（HTTP 型，Nodejs18.15）。单入口，按 `url.pathname` 分发：
+
+| 路由 | 状态 |
+|---|---|
+| `GET /api/health` | 已上线（2026-10-01） |
+| `GET /api/settings` | 已上线（2026-10-02） |
+| `GET /api/checkins` | 已上线（2026-10-02） |
+| 其余路径（含未实现的 A3/A5/A6/A7） | 404 `NOT_FOUND` |
+
+**网关路由**：域名下只保留一条 **`/api`**（前缀匹配 + `enablePathTransmission: true`，即完整路径透传给函数）。曾经的单条 `/api/health` 路由已删除——**路由是按路径一条条建的，不放开就会连函数都进不去**。
+
+> 排查提示：接口返回的 404 文案若是 `INVALID_PATH`，说明请求**没到函数、被网关挡了**；本函数自己的 404 文案是「没有这个接口」。
+
+**数据库访问方式（方案乙：PG 网关 + 官方 SDK）**：
+
+| 项 | 值 |
+|---|---|
+| 客户端 | `@cloudbase/node-sdk@3.18.3`，用 `app.rdb({ instance: "default", database: "public" })` |
+| 凭证 | 云函数环境变量 `CLOUDBASE_APIKEY`（**只进环境变量，永不进代码 / 仓库 / 响应**） |
+| 凭证类型 | 环境的 **Publishable Key**（对应数据库角色 `anon`） |
+
+**四个踩过的结论（照抄即可，别再试错）**：
+
+1. **`app.rdb()` 必须显式传 `database: "public"`**。不传时 SDK 内部按 `const { database = envId } = options` 把**环境 ID 当 schema 名**发出去，网关回 `406 DATABASE_PGRST106 Invalid schema`。
+2. **通过工具通道创建的 `api_key` 类型凭证被 PG 网关拒收**（`401 INVALID_CREDENTIALS`；对照：不带凭证是 `MISSING_CREDENTIALS`，说明请求头送达了）。同一请求改带 Publishable Key 立刻 `200`。→ 本期读接口就用 Publishable Key。**二期启用登录 + RLS 时必须重定凭证策略**（读接口应转发调用方 token，或改用控制台创建的服务端 Key）。
+3. **凭证失效时 SDK 会在「后台」抛未处理的 Promise 拒绝**，Node 默认直接杀进程 → 平台回 HTML 错误页，违背 2.3。云函数顶部已加进程级 `unhandledRejection` 兜底，只记日志不退出。
+4. **查询固定带 `.eq("user_id", 0)`**（契约 4.5 未写此参数）：本期单人数据恒为 0，写死一处便于二期多人版收编。
+
+**接口是实时查库、没有缓存**：改一条数据，下次请求立刻反映。验证闭环（2026-10-02 实测通过）：
+
+```
+① 控制台 SQL 编辑器：UPDATE checkins SET weight_kg = 70.0 WHERE date = DATE '2026-09-21';   → UPDATE 1
+② 刷新 <API_BASE>/api/checkins?from=2026-09-21&to=2026-09-21                                  → weightKg: 70   ✅ 跟着变
+③ 改回去：UPDATE checkins SET weight_kg = 65.5 WHERE date = DATE '2026-09-21';               → weightKg: 65.5 ✅
+   （顺带核对 /api/checkins 的 total 始终为 9 —— 值改了，条数没多没少）
+```
+
+**线上验证清单**：
+
+| 请求 | 预期 |
+|---|---|
+| `<API_BASE>/api/health` | 200 `{"ok":true,"service":"daily-health-log-demo","time":"…"}` |
+| `<API_BASE>/api/settings` | 200，`30 / 2000 / 2026-09-21` |
+| `<API_BASE>/api/checkins` | 200，`total: 9`，`date` 升序 |
+| `<API_BASE>/api/checkins?from=2026-09-27&to=2026-10-01` | 200，3 条 |
+| `<API_BASE>/api/checkins?from=2026-10-01&to=2026-09-01` | 400 `INVALID_PARAM` |
+| `<API_BASE>/api/checkins/2026-09-21` | 404 `NOT_FOUND`（A5 未实现，属预期） |
+
+**部署方式**：改写 `cloudfunctions/api-health/` 下的代码后，重新上传该函数目录（依赖 `node_modules` 随包或由平台安装均可，函数已开 `InstallDependency`）。**改完代码必须重新部署，只改本地文件线上不会变。**
+
+---
+
 ## 五、页面 → 接口映射表（第 3 周前端改造清单）
 
 > 用途：改造时逐页对照，防止漏接口或重复请求。`welcome.html` 是纯开屏页，**不调任何接口**。
@@ -489,10 +555,10 @@ ALTER TABLE settings ADD CONSTRAINT settings_user_fk FOREIGN KEY (user_id) REFER
 | # | 事项 | 依据 | 备注 |
 |---|---|---|---|
 | 1 | 在 PostgreSQL 里建 `checkins` / `settings` 两张表 | `db/schema.sql` | **已完成（2026-10-01）**：脚本与示例数据已生成，执行步骤、验证 SELECT、报错对照见 `db/README.md` |
-| 2 | 写 A2/A3/A4/A5/A6 五个接口（A7 可延后） | 本文档第四节 | 建议顺序：A4 读 → A6 写 → A2/A3（TECH_DESIGN 3.0 ③④） |
-| 3 | 把 `api-health` 的错误分支形状统一成 `{ok:false,error:{code,message}}` | 本文档 2.2 | 现状是 `{"ok":false,"error":"Method Not Allowed"}`（字符串），功能正常，只是形状不统一 |
+| 2 | 写 A2/A3/A4/A5/A6 五个接口（A7 可延后） | 本文档第四节 | **部分完成（2026-10-02）**：A4 `GET /api/checkins`、A2 `GET /api/settings` 已上线（见 4.9）；剩余顺序：A6 写 → A3 → A5 |
+| 3 | 把 `api-health` 的错误分支形状统一成 `{ok:false,error:{code,message}}` | 本文档 2.2 | **已完成（2026-10-02）**：404 / 405 / 400 / 500 全部统一；A1 的成功响应形状按 2.2 的例外保持不变 |
 | 4 | 前端接接口：换掉 `state.js` 的模拟取数 | 本文档 4.5 末注 | 单点改造，`history.js` 不动 |
-| 5 | 处理 CORS（浏览器首次发请求时） | 本文档 2.7 | 若被拦再处理，不提前做 |
+| 5 | 处理 CORS（浏览器首次发请求时） | 本文档 2.7 | **已具备（2026-10-02）**：云函数响应头已带 `Access-Control-Allow-Origin: *` 并放行 OPTIONS 预检；前端真正发起跨域请求时若仍被拦，再按 2.7 收紧白名单 |
 | 6 | 本地数据迁移：导出 → A7 导入 → 人工核对 | TECH_DESIGN 3.7 | 程序**永不**自动清本地数据 |
 
 ---
@@ -503,6 +569,7 @@ ALTER TABLE settings ADD CONSTRAINT settings_user_fk FOREIGN KEY (user_id) REFER
 |---|---|---|
 | v1.0 | 2026-10-01 | 初稿登记：7 个接口（1 个已上线）、2 张表、统一响应与错误形状、页面映射表、"不做"清单 |
 | v1.1 | 2026-10-01 | **数据模型落地**：新增 3.4「数据库实现现状」（`user_id` 定为 `NOT NULL DEFAULT 0` 及原因、二期收编 SQL、约束清单、空值分工、`start_date` 不写触发器、索引取舍）；3.1 建表出处改为 `db/schema.sql`；4.7 补 `user_id` 固定 0 的实现要点；第七节第 1 项标记完成 |
+| v1.2 | 2026-10-02 | **A2 / A4 已实现并上线**：新增 **4.9「接口实现现状」**（云函数单入口路由表、网关 `/api` 前缀路由与 `INVALID_PATH` 排查法、SDK 必填 `database: "public"`、凭证改用 Publishable Key 及 `api_key` 被网关拒收的实测结论、`unhandledRejection` 兜底、`user_id` 固定过滤、实时查库验证闭环、线上验证清单、部署方式）；2.1 基地址说明更新为 `/api` 前缀路由；4.2 补 A1 错误形状已统一；4.3 / 4.5 补状态与验证地址；4.1 总表状态更新；第七节第 2 / 3 / 5 项更新 |
 
 ---
 

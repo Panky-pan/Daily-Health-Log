@@ -1,7 +1,7 @@
 {
   "name": "api-health",
-  "version": "1.1.0",
-  "description": "单入口 HTTP 接口：GET /api/health、GET /api/settings、GET /api/checkins",
+  "version": "1.2.0",
+  "description": "单入口 HTTP 接口：GET /api/health、GET /api/settings、GET /api/checkins、PUT /api/checkins/{date}",
   "main": "index.js",
   "dependencies": {
     "@cloudbase/node-sdk": "3.18.3"

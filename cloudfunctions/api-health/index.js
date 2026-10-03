@@ -4,9 +4,14 @@
 //     A1  GET /api/health            健康检查（响应形状是契约的唯一例外，不带 data 包裹）
 //     A2  GET /api/settings          读目标设置（表 settings，单人只有一条）
 //     A4  GET /api/checkins          列表读取打卡记录（表 checkins，一天一条）
+//     A6  PUT /api/checkins/{date}   保存 / 覆盖单日记录（唯一的写入口）
 //
-// 字段与响应形状的唯一依据：api-contract.md（2.2 响应形状 / 2.6 空值 / 4.3 A2 / 4.5 A4）。
+// 字段与响应形状的唯一依据：api-contract.md（2.2 响应形状 / 2.6 空值 / 4.3 A2 / 4.5 A4 / 4.7 A6）。
 // 代码与文档冲突时以文档为准。
+//
+// 关于 A6 的「防重复」：契约约定的是 **覆盖保存（upsert）**，不是拒绝。
+//   同一天再打卡一次 = 覆盖那天的记录，响应里 isNew:false，前端据此显示「已更新今日记录」。
+//   兜底是数据库的 UNIQUE (user_id, date) —— 一天只可能有一条，插不出第二条。
 //
 // 关键约定（HTTP 型云函数）：就是一个标准 Web 服务，必须监听 9000 端口，
 //   并随代码包附带 scf_bootstrap 启动脚本（由平台执行它来拉起本服务）。
@@ -46,6 +51,7 @@ const MAX_LIMIT = 1000;
 
 // 错误码字典：前端按 code 分支，message 是给人看的中文口语短句（契约 2.2 / 2.3）
 const ERR = {
+  VALIDATION_ERROR: "VALIDATION_ERROR",
   INVALID_PARAM: "INVALID_PARAM",
   NOT_FOUND: "NOT_FOUND",
   METHOD_NOT_ALLOWED: "METHOD_NOT_ALLOWED",
@@ -63,7 +69,7 @@ const ERR = {
 // 不允许是 "*"，更不允许逗号多值）→ 浏览器判定跨域失败，前端报 "Failed to fetch"。
 // 所以这里只保留方法/请求头两项，Allow-Origin 交给网关。
 const CORS_HEADERS = {
-  "Access-Control-Allow-Methods": "GET, OPTIONS",
+  "Access-Control-Allow-Methods": "GET, PUT, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type",
 };
 
@@ -114,10 +120,11 @@ function sendFail(res, statusCode, code, message, field) {
   sendJson(res, statusCode, { ok: false, error });
 }
 
-// 数据库读失败 → 500 DB_ERROR（契约 2.3）。真实错误只进云端日志，不回给前端。
-function sendDbError(res, where, error) {
-  console.error(`[api-health] ${where} 读数据库失败:`, error);
-  return sendFail(res, 500, ERR.DB_ERROR, "记录暂时取不出来，稍后再试");
+// 数据库读写失败 → 500 DB_ERROR（契约 2.3）。真实错误只进云端日志，不回给前端。
+// message 可覆盖：读失败说"取不出来"，写失败说"没存上"，都比一句笼统的"出错了"好懂。
+function sendDbError(res, where, error, message = "记录暂时取不出来，稍后再试") {
+  console.error(`[api-health] ${where} 访问数据库失败:`, error);
+  return sendFail(res, 500, ERR.DB_ERROR, message);
 }
 
 function sendMethodNotAllowed(res, method) {
@@ -215,6 +222,163 @@ function daysBetween(from, to) {
 }
 
 // ---------------------------------------------------------------------------
+// 请求体读取（A6）
+// ---------------------------------------------------------------------------
+
+// 单日记录再长也就几百字节，64KB 是个宽松的上限；超过就直接拒绝，不给内存压力。
+const MAX_BODY_BYTES = 64 * 1024;
+
+// 读出请求体并解析成 JSON 对象。
+// 返回 { value } 或 { bad: "parse" }（体积超限同理当作解析失败，前端只需要知道"体不对"）。
+// 空请求体按 {} 处理 —— 交给字段校验去说"什么都没填"，错误信息比"body 是空的"更有用。
+function readJsonBody(req) {
+  return new Promise((resolve) => {
+    let size = 0;
+    const chunks = [];
+
+    req.on("data", (chunk) => {
+      size += chunk.length;
+      if (size > MAX_BODY_BYTES) {
+        req.destroy();
+        resolve({ bad: "parse" });
+        return;
+      }
+      chunks.push(chunk);
+    });
+
+    req.on("end", () => {
+      const raw = Buffer.concat(chunks).toString("utf8").trim();
+      if (raw === "") return resolve({ value: {} });
+      try {
+        resolve({ value: JSON.parse(raw) });
+      } catch (e) {
+        resolve({ bad: "parse" });
+      }
+    });
+
+    req.on("error", () => resolve({ bad: "parse" }));
+  });
+}
+
+// ---------------------------------------------------------------------------
+// 字段校验（A6 · 契约 4.7 + 3.2）
+// ---------------------------------------------------------------------------
+// 规则与前端 assets/js/validate.js 一一对应，文案也刻意保持一致：
+// 前端红字和后端 400 的 message 说的是同一句话，用户在哪一层被拦都看到同样的提示。
+// 后端**必须**自己再跑一遍 —— 前端校验只为体验，绕过前端直接发请求是挡不住的。
+
+// 枚举值必须与 db/schema.sql 的 CHECK 约束一致
+const EXERCISE_TYPES = ["散步", "慢跑", "跳绳", "骑行", "力量训练", "瑜伽"];
+const MEAL_TAGS = ["健康", "普通", "放纵"];
+
+// 三餐三件套：API 字段名 ↔ 数据库列名 ↔ 给用户看的称谓
+const MEALS = [
+  { textKey: "mealBreakfastText", tagKey: "mealBreakfastTag", textCol: "meal_breakfast_text", tagCol: "meal_breakfast_tag", label: "早餐" },
+  { textKey: "mealLunchText", tagKey: "mealLunchTag", textCol: "meal_lunch_text", tagCol: "meal_lunch_tag", label: "午餐" },
+  { textKey: "mealDinnerText", tagKey: "mealDinnerTag", textCol: "meal_dinner_text", tagCol: "meal_dinner_tag", label: "晚餐" },
+];
+
+function fieldError(field, message) {
+  return { error: { code: ERR.VALIDATION_ERROR, field, message } };
+}
+
+// 数字解析：接受 number，或能整段解析成数字的字符串（表单里常见 "30"）。
+// 返回 null = 没填；返回 NaN = 填了但不是数字（调用方据此报 400）。
+function parseNum(v) {
+  if (v === undefined || v === null || v === "") return null;
+  if (typeof v === "number") return Number.isFinite(v) ? v : NaN;
+  if (typeof v === "string") {
+    const s = v.trim();
+    if (s === "") return null;
+    if (/^-?\d+(\.\d+)?$/.test(s)) return Number(s);
+  }
+  return NaN;
+}
+
+// 文字解析：只认字符串和空值。数字/布尔/对象/数组一律判错 ——
+// 否则一个对象会被 String() 存成 "[object Object]"，问题藏进数据库里更难查。
+function parseText(v) {
+  if (v === undefined || v === null || v === "") return { value: "" };
+  if (typeof v === "string") return { value: v.trim() };
+  return { bad: true };
+}
+
+// 空值统一转 null：数据库列是 INTEGER / NUMERIC / TEXT，存不下空字符串（契约 3.4 空值分工）
+function blankToNull(v) {
+  return v === "" ? null : v;
+}
+
+// 校验单日记录。
+// 通过 → { values }：键已是数据库列名，没填的一律 null，可直接拼进写库语句。
+// 不过 → { error: { code, field, message } }：第一条不合格的字段就返回，字段顺序即表单从上到下的顺序。
+function validateCheckin(raw) {
+  const values = {};
+
+  // ---- 运动 ----
+  const type = parseText(raw.exerciseType);
+  if (type.bad) return fieldError("exerciseType", "运动类型要写成文字");
+  if (type.value !== "" && !EXERCISE_TYPES.includes(type.value)) {
+    return fieldError("exerciseType", `运动类型只能是：${EXERCISE_TYPES.join(" / ")}`);
+  }
+  values.exercise_type = blankToNull(type.value);
+
+  const minutes = parseNum(raw.exerciseMinutes);
+  if (Number.isNaN(minutes) || (minutes !== null && (!Number.isInteger(minutes) || minutes < 0 || minutes > 600))) {
+    return fieldError("exerciseMinutes", "时长要填 0~600 的整数分钟");
+  }
+  values.exercise_minutes = minutes;
+
+  // 卡路里由前端 calories.js 算好随请求提交，后端只验范围、不重算（TECH_DESIGN 3.7 第 5 条）
+  const calories = parseNum(raw.exerciseCalories);
+  if (Number.isNaN(calories) || (calories !== null && (!Number.isInteger(calories) || calories < 0 || calories > 9999))) {
+    return fieldError("exerciseCalories", "卡路里要填 0~9999 的整数");
+  }
+  values.exercise_calories = calories;
+
+  const weight = parseNum(raw.weightKg);
+  if (Number.isNaN(weight)) return fieldError("weightKg", "体重要填 30~200 kg 之间的数");
+  if (weight !== null) {
+    if (weight < 30 || weight > 200) return fieldError("weightKg", "体重要填 30~200 kg 之间的数");
+    // NUMERIC(4,1) 会把多余小数位四舍五入（65.55 → 65.6），所以在这里挡住，别让用户填了却被偷偷改数
+    if (Math.round(weight * 10) !== weight * 10) return fieldError("weightKg", "体重最多填一位小数");
+  }
+  values.weight_kg = weight;
+
+  const water = parseNum(raw.waterMl);
+  if (Number.isNaN(water) || (water !== null && (!Number.isInteger(water) || water < 0 || water > 10000))) {
+    return fieldError("waterMl", "饮水量要填 0~10000 的整数 ml");
+  }
+  values.water_ml = water;
+
+  // ---- 三餐 ----
+  // 「至少有一项内容」只认用户真正填的东西：运动（类型/时长）、三餐、体重、饮水。
+  // 卡路里是自动算出来的，单独有值不算"记了东西"（契约 4.7 第 1 条，PRD E3）。
+  let hasContent = type.value !== "" || minutes !== null || weight !== null || water !== null;
+
+  for (const meal of MEALS) {
+    const text = parseText(raw[meal.textKey]);
+    if (text.bad) return fieldError(meal.textKey, `${meal.label}吃了什么要写成文字`);
+    if (text.value.length > 100) return fieldError(meal.textKey, "一句话就好，100 字以内");
+
+    const tag = parseText(raw[meal.tagKey]);
+    if (tag.bad) return fieldError(meal.tagKey, `${meal.label}标签要写成文字`);
+    if (tag.value !== "" && !MEAL_TAGS.includes(tag.value)) {
+      return fieldError(meal.tagKey, `${meal.label}标签只能是：健康 / 普通 / 放纵`);
+    }
+
+    values[meal.textCol] = blankToNull(text.value);
+    values[meal.tagCol] = blankToNull(tag.value);
+    if (text.value !== "" || tag.value !== "") hasContent = true;
+  }
+
+  if (!hasContent) {
+    return fieldError("record", "这一天还什么都没填，先记一项再保存吧");
+  }
+
+  return { values };
+}
+
+// ---------------------------------------------------------------------------
 // 路由处理
 // ---------------------------------------------------------------------------
 
@@ -295,6 +459,83 @@ async function handleListCheckins(res, params) {
   return sendOk(res, { items, total: items.length });
 }
 
+// A6 · PUT /api/checkins/{date} —— 保存 / 覆盖单日记录（契约 4.7）
+//
+// 执行顺序「先校验、后写库」，任何一格没通过就原样退回，绝不半截写进去：
+//   ① 路径日期格式 → ② 请求体是不是 JSON 对象 → ③ 请求体里的 date 是否与路径一致
+//   → ④ 11 个字段逐个校验 → ⑤「至少有一项内容」→ ⑥ 写库
+async function handlePutCheckin(res, date, req) {
+  // ① 路径参数：全链路只认 YYYY-MM-DD，且必须是真实存在的日期
+  if (!isDateStr(date)) {
+    return sendFail(res, 400, ERR.INVALID_PARAM, "地址里的日期格式不对，应该写成 2026-09-21 这样");
+  }
+
+  // ② 请求体（空体按 {} 处理，让第 ⑤ 步去说"什么都没填"）
+  const body = await readJsonBody(req);
+  const raw = body.bad ? null : body.value;
+  if (body.bad) {
+    return sendFail(res, 400, ERR.VALIDATION_ERROR, "请求体不是合法的 JSON，检查一下格式", "record");
+  }
+  if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
+    return sendFail(res, 400, ERR.VALIDATION_ERROR, "请求体要是一个 JSON 对象，比如 {\"waterMl\": 1800}", "record");
+  }
+
+  // ③ 日期以路径为准；请求体里若也带了 date，必须与路径一致（契约 4.7）
+  if (!(raw.date === undefined || raw.date === null || raw.date === "")) {
+    if (dateOnly(raw.date) !== date) {
+      return sendFail(res, 400, ERR.VALIDATION_ERROR, "请求体里的日期和地址里的日期对不上", "date");
+    }
+  }
+
+  // ④⑤ 字段校验
+  const checked = validateCheckin(raw);
+  if (checked.error) {
+    return sendFail(res, 400, checked.error.code, checked.error.message, checked.error.field);
+  }
+
+  // ⑥-a 先看这天有没有记录 —— 决定返回 isNew（新建 / 覆盖），契约 4.7 的成功响应里要它
+  const { data: existingRows, error: readError } = await getDb()
+    .from("checkins")
+    .select("date")
+    .eq("user_id", USER_ID)
+    .eq("date", date)
+    .limit(1);
+  if (readError) return sendDbError(res, "PUT /api/checkins 查重", readError);
+  const isNew = !(Array.isArray(existingRows) ? existingRows.length > 0 : existingRows);
+
+  // ⑥-b 覆盖保存：INSERT ... ON CONFLICT (user_id, date) DO UPDATE，一条语句搞定新建和覆盖。
+  //   冲突键必须写 (user_id, date)，并且 user_id 必须是 0 而不是 NULL ——
+  //   PG 里 NULL 互不相等，冲突不会发生，同一天会插出第二条记录（契约 4.7 实现要点）。
+  //   updated_at 在这里显式给值（故意的，不用触发器：规则留在代码里一眼能看见）。
+  const { data: savedRows, error: writeError } = await getDb()
+    .from("checkins")
+    .upsert(
+      { ...checked.values, user_id: USER_ID, date, updated_at: new Date().toISOString() },
+      { onConflict: "user_id,date" }
+    )
+    .select();
+  if (writeError) return sendDbError(res, "PUT /api/checkins 写库", writeError, "记录没存上，稍后再试一次");
+
+  // ⑥-c 拿"保存之后的样子"作为响应：优先用写库直接回传的那行；
+  //   万一网关没把 representation 带回来，就补一次读 —— 响应里必须有完整记录，这是契约 4.7 的规定。
+  let saved = Array.isArray(savedRows) ? savedRows[0] : savedRows;
+  if (!saved) {
+    const { data: afterRows, error: afterError } = await getDb()
+      .from("checkins")
+      .select("*")
+      .eq("user_id", USER_ID)
+      .eq("date", date)
+      .limit(1);
+    if (afterError) return sendDbError(res, "PUT /api/checkins 回读", afterError, "记录存下了但没能读回来，刷新页面看看");
+    saved = Array.isArray(afterRows) ? afterRows[0] : afterRows;
+  }
+  if (!saved) {
+    return sendFail(res, 500, ERR.INTERNAL_ERROR, "记录没存上，稍后再试一次");
+  }
+
+  return sendOk(res, { saved: true, isNew, record: checkinToApi(saved) });
+}
+
 // ---------------------------------------------------------------------------
 // 服务本体
 // ---------------------------------------------------------------------------
@@ -323,12 +564,22 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (path === "/api/checkins") {
-      // A6（PUT）今天还没做，所以除了 GET 都回 405
+      // 写单日记录不用这个地址（那是 A6 的 /api/checkins/{date}）
       if (req.method !== "GET") return sendMethodNotAllowed(res, req.method);
       return await handleListCheckins(res, url.searchParams);
     }
 
-    // 路径不存在（含还没实现的 A5 /api/checkins/{date}、A7 import）
+    // A6 · /api/checkins/{date}：保存 / 覆盖单日记录
+    if (path.startsWith("/api/checkins/")) {
+      const rest = path.slice("/api/checkins/".length);
+      // A7 批量导入（POST /api/checkins/import）登记待实现，先当路径不存在（契约 4.8）
+      if (rest === "import") return sendFail(res, 404, ERR.NOT_FOUND, "没有这个接口");
+      // 路径对、方法不对（比如 GET 或 POST 这个地址）→ 405（契约 2.3）
+      if (req.method !== "PUT") return sendMethodNotAllowed(res, req.method);
+      return await handlePutCheckin(res, rest, req);
+    }
+
+    // 路径不存在（含还没实现的 A5 GET /api/checkins/{date}、A3 /api/settings 的 PUT）
     return sendFail(res, 404, ERR.NOT_FOUND, "没有这个接口");
   } catch (e) {
     console.error("[api-health] 未捕获异常:", e);

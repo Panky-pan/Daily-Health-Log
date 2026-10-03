@@ -12,11 +12,10 @@
    三餐标签由「清爽/标准/丰盛」改为「健康/普通/放纵」（PRD 6.4）。
    老用户第一次打开任意页面时自动转换一次，细节见 migrateIfNeeded()。
 
-   云端覆盖层（Day 17 新增，2026-10-02）：
-   接口接通后，**读**走云端的真库数据（由 api-source.js 取回后调 applyRemote 放进来），
-   **写**暂时还在本地（业务写入接口排在 Day 18）。
-   云端取不到时（applyRemote 没被调用过）自动回落到本地数据，页面不会白屏。
-   注意：本地数据**只读不改**——覆盖层只在内存里，不写 localStorage，绝不覆盖你的老数据。
+   **写**（Day 18 接上 A6）：打卡页保存时先 PUT 云端，成功后就地更新
+   这个内存覆盖层（putRemoteCheckin），所以保存完立刻回今日页看到的就是新值，
+   一刷新也从云端读回来，不会再"回退成旧记录"。
+   只有云端写失败时才回落写本地（saveCheckin），页面上会明说"已存本机"。
    ============================================ */
 
 (function () {
@@ -163,6 +162,26 @@
     return remote !== null;
   }
 
+  /**
+   * 云端写入成功后，把这条记录就地更新进覆盖层（Day 18，配合 A6）。
+   *
+   * 为什么不复用 saveCheckin：那个是写 localStorage 的。方案 A 之下云端写成功
+   * 就**不该再写本地**（本地那份是"云端取不到时的兜底"，不是第二份数据源）。
+   *
+   * 为什么必须更新覆盖层：页面读数据走 getCheckins()，云端覆盖层一旦存在就
+   * 优先读它。若不更新，保存后回今日页看到的还是保存前的旧值，且要等下次
+   * 刷新重新 GET 才纠正 —— 表现出来就像"存了但没存上"。
+   *
+   * @param {string} date   日期 YYYY-MM-DD
+   * @param {Object} record 保存后的完整记录（用云函数回传的那份，含服务端归一化结果）
+   * @returns {boolean} 覆盖层是否处于生效状态（false = 云端数据没取到，本次走的是本地兜底）
+   */
+  function putRemoteCheckin(date, record) {
+    if (!remote) return false;
+    remote.checkins[date] = record;
+    return true;
+  }
+
   /* ---- settings：全局目标设置（PRD 6.2） ---- */
   // 读设置；没有返回 null（调用方据此判断“首次使用”→ 显示设置表单）
   function getSettings() {
@@ -224,6 +243,7 @@
     saveSettings: saveSettings,
     getCheckins: getCheckins,
     saveCheckin: saveCheckin,
+    putRemoteCheckin: putRemoteCheckin,
     applyRemote: applyRemote,
     isRemote: isRemote
   };

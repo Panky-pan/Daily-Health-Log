@@ -1,8 +1,11 @@
 /* ============================================
-   api-source.js —— 前端取数层（Day 17 新增）
+   api-source.js —— 前端取数层（Day 17 新增，Day 18 加写接口）
    ------------------------------------------------------------
-   干什么：页面打开时去云端的两个读接口取一次真实数据，取到后
-   交给 storage.js 的「云端覆盖层」，页面照旧从 dhlStorage 读数。
+   干什么：
+   1. 读：页面打开时去云端的两个读接口取一次真实数据，取到后
+      交给 storage.js 的「云端覆盖层」，页面照旧从 dhlStorage 读数；
+   2. 写：打卡页保存时调 saveCheckin()，把这一天的记录 PUT 到云端
+      （A6 PUT /api/checkins/{date}，upsert 覆盖）。
 
    为什么要单独一层（而不是各页面各写一遍 fetch）：
    1. storage.js 是全项目唯一的数据出入口（它自己的文件头就是这么写的），
@@ -11,8 +14,13 @@
    3. 取不到时**不白屏**：只打一条控制台警告，页面继续用本地数据渲染
       （沿用 PRD E2「数据异常也不报错不白屏」的思路）。
 
-   接口契约：api-contract.md 4.3（A2 /api/settings）、4.5（A4 /api/checkins）。
+   接口契约：api-contract.md 4.3（A2 /api/settings）、4.5（A4 /api/checkins）、
+   4.7（A6 PUT /api/checkins/{date}）。
    字段已经是 camelCase，与页面直接对接，不需要再转换。
+
+   写入策略（Day 18 拍板，方案 A「云端优先 + 本地兜底」）：
+   先 PUT 云端，成功 → 只更新内存覆盖层（不碰 localStorage）；
+   失败 → 由 checkin.js 回落写本地，页面提示「已存本机」。
    ============================================ */
 
 (function () {
@@ -38,6 +46,46 @@
         return body.data;
       });
     });
+  }
+
+  /**
+   * A6 写接口：保存 / 覆盖某天的打卡记录（契约 4.7）。
+   *
+   * 与 fetchJson 的区别：写接口的失败要**交给页面显示红字**，不能让异常冒到
+   * Promise 外面去（页面只想拿到一个明确的结果对象），所以这里不用 fetchJson，
+   * 而是自己把成功/失败都收敛成 { ok, ... } 的形状。
+   *
+   * @param {string} date   日期 YYYY-MM-DD（路径参数，请求体里不带）
+   * @param {Object} record 单日记录（camelCase，字段同契约 3.2）
+   * @returns {Promise<{ok: true, isNew: boolean, record: Object} | {ok: false, message: string}>}
+   *   永远 resolve，调用方不需要写 catch。
+   */
+  function saveCheckin(date, record) {
+    // 契约 4.7：请求体不含 date（日期以路径为准）；带了必须与路径一致，否则 400。
+    // 这里直接把 date 剔掉，避免"路径与请求体不一致"这种低级 400。
+    var payload = {};
+    Object.keys(record || {}).forEach(function (k) {
+      if (k !== 'date') payload[k] = record[k];
+    });
+
+    return fetch(API_BASE + '/api/checkins/' + encodeURIComponent(date), {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    })
+      .then(function (res) {
+        return res.json().then(function (body) {
+          if (!res.ok || !body || body.ok !== true) {
+            var msg = (body && body.error && body.error.message) || ('保存失败（HTTP ' + res.status + '）');
+            return { ok: false, message: msg };
+          }
+          return { ok: true, isNew: body.data.isNew === true, record: body.data.record };
+        });
+      })
+      .catch(function (e) {
+        // 网络不通 / 响应不是 JSON —— 都当成"这次没存上"，由页面决定怎么提示
+        return { ok: false, message: (e && e.message) || '网络不通，这次没存上' };
+      });
   }
 
   /**
@@ -87,6 +135,7 @@
     API_BASE: API_BASE,
     load: load,
     ready: ready,
+    saveCheckin: saveCheckin,
     getResult: function () { return result; }
   };
 })();

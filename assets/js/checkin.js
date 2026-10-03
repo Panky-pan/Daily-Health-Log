@@ -1,8 +1,11 @@
 /* ============================================
-   checkin.js —— 打卡独立页逻辑（Day 14 板块 A）
+   checkin.js —— 打卡独立页逻辑（Day 14 板块 A，Day 18 接云端写入）
    这一页的职责只有一个：把今天的记录填好、存下来、然后回今日页。
    - 表单字段、校验规则、存储结构都沿用原来的打卡卡片，没有新口径
-   - 只依赖 storage / calories / validate 三个文件（不算 streak、不算健康分）
+   - 只依赖 storage / api-source / calories / validate 四个文件
+   保存策略（Day 18 拍板方案 A「云端优先 + 本地兜底」）：
+     先 PUT 云端（A6），成功 → 更新内存覆盖层，回今日页看到的就是新值；
+     失败 → 回落写本地，并明说「已存本机」，绝不假装成功（PRD E7）。
    保存成功后停在页面约 0.9 秒，让用户看到「已存好」再自动返回 index.html。
    ============================================ */
 
@@ -107,7 +110,45 @@
     el.hidden = false;
   }
 
+  // 保存中/返回中：锁住按钮，避免连点存两次
+  function lockSubmit(text) {
+    submitBtn.textContent = text;
+    submitBtn.disabled = true;
+  }
+
+  // 记住按钮的初始文案（HTML 里写的那句），失败后好恢复
+  submitBtn.dataset.defaultText = submitBtn.textContent;
+
   /* ============ 三、保存 ============ */
+
+  /**
+   * 保存成功后的收尾：给定文案 → 显示卡路里 → 锁按钮 → 延时回今日页。
+   * @param {boolean} isNew 是新建（true）还是覆盖了原有记录（false）
+   * @param {number} calories 本次估算出的卡路里（0 = 没记运动）
+   */
+  function finishSave(isNew, calories) {
+    // 就地给反馈，然后回今日页看结果（E6 覆盖时提示「已更新」）
+    setStatus(isNew ? '今日已打卡 ✓ 正在返回…' : '已更新今日记录，正在返回…');
+    if (calories > 0) {
+      calorieNote.textContent = typeSelect.value + ' ' + minutesInput.value + ' 分钟 ≈ ' + calories + ' 大卡';
+      calorieNote.hidden = false;
+    }
+    lockSubmit(isNew ? '已打卡，返回中…' : '已更新，返回中…');
+    window.setTimeout(function () {
+      window.location.href = 'index.html';
+    }, BACK_DELAY_MS);
+  }
+
+  // 提交中：按钮换文案并锁住（云端往返期间防止连点）
+  function showSaving() {
+    lockSubmit('正在保存…');
+  }
+
+  // 提交失败后恢复按钮，让用户可以改完再存一次
+  function unlockSubmit() {
+    submitBtn.textContent = submitBtn.dataset.defaultText || '保存今日打卡';
+    submitBtn.disabled = false;
+  }
 
   checkinForm.addEventListener('submit', function (e) {
     e.preventDefault();
@@ -173,36 +214,59 @@
       waterMl: water.value
     };
 
-    // ---- 写入 localStorage（E7 失败要明说，不假装成功） ----
-    var result = window.dhlStorage.saveCheckin(date, record);
-    if (!result.ok) {
-      showError(saveError, '没存上，检查一下浏览器存储设置再试试');
+    // ---- 写入：先云端（A6），失败才回落本地（方案 A） ----
+    showSaving();
+
+    // 云端不可用（脚本没加载出来，理论上不会）→ 直接走本地兜底，别卡住页面
+    if (!window.dhlApi || typeof window.dhlApi.saveCheckin !== 'function') {
+      saveLocally(date, record, calories, '云端连接没加载上，先存本机了');
       return;
     }
 
-    // ---- 首次打卡：把开始使用日期写进设置（坚持率分母用） ----
+    window.dhlApi.saveCheckin(date, record).then(function (res) {
+      if (res.ok) {
+        // 云端存上了：更新内存覆盖层，页面立刻就是新值；本地那份不动（方案 A）
+        window.dhlStorage.putRemoteCheckin(date, res.record || record);
+        ensureStartDate(date);
+        finishSave(res.isNew, calories);
+        return;
+      }
+      // 云端没存上：回落本地，并明说存到哪了（E7：不假装成功）
+      saveLocally(date, record, calories, res.message);
+    });
+  });
+
+  /**
+   * 本地兜底写入（云端写失败时用）。
+   * 页面提示必须让用户知道「存哪了」——不然他会以为白填了。
+   */
+  function saveLocally(date, record, calories, reason) {
+    var result = window.dhlStorage.saveCheckin(date, record);
+    if (!result.ok) {
+      showError(saveError, '没存上，检查一下浏览器存储设置再试试');
+      unlockSubmit();
+      return;
+    }
+    ensureStartDate(date);
+    setStatus('云端暂时连不上（' + reason + '），已先存本机 ✓');
+    if (calories > 0) {
+      calorieNote.textContent = typeSelect.value + ' ' + minutesInput.value + ' 分钟 ≈ ' + calories + ' 大卡';
+      calorieNote.hidden = false;
+    }
+    lockSubmit('已存本机，返回中…');
+    window.setTimeout(function () {
+      window.location.href = 'index.html';
+    }, BACK_DELAY_MS);
+  }
+
+  // 首次打卡：把开始使用日期写进设置（坚持率分母用）。已有则不动（契约 3.3 规则 2）
+  function ensureStartDate(date) {
     var settings = window.dhlStorage.getSettings();
     if (settings && !settings.startDate) {
       settings.startDate = date;
       window.dhlStorage.saveSettings(settings);
     }
-
-    // ---- 保存成功：就地给反馈，然后回今日页看结果（E6 覆盖时提示「已更新」） ----
-    var feedback = result.isNew ? '今日已打卡 ✓ 正在返回…' : '已更新今日记录，正在返回…';
-    setStatus(feedback);
-    if (calories > 0) {
-      calorieNote.textContent = typeSelect.value + ' ' + minutes.value + ' 分钟 ≈ ' + calories + ' 大卡';
-      calorieNote.hidden = false;
-    }
-
-    // 返回期间锁住按钮，避免连点存两次
-    var backText = result.isNew ? '已打卡，返回中…' : '已更新，返回中…';
-    submitBtn.textContent = backText;
-    submitBtn.disabled = true;
-    window.setTimeout(function () {
-      window.location.href = 'index.html';
-    }, BACK_DELAY_MS);
-  });
+  }
 
   /* ============ 四、页面初始化 ============ */
 

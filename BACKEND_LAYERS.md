@@ -2,31 +2,34 @@
 
 记录云函数 `api-health` 的目录分层。**2026-10-05 重构后生效**：只调结构，不改行为 ——
 接口、状态码、响应形状、错误文案全部与重构前逐字一致（29 条回归请求比对通过）。
+**2026-10-06 补记**：A5、A3 两个接口在这套分层上各自加了一个 handler 函数与一个校验文件，
+没有破坏任何一条依赖方向；目录树与行数已按最新代码更新。
 
 ## 一、目录树
 
 ```
 cloudfunctions/api-health/
-├── index.js          # 入口（99 行）：进程兜底 + HTTP 服务 + 路由表 + try/catch 兜底
+├── index.js          # 入口（129 行）：进程兜底 + HTTP 服务 + 路由表 + try/catch 兜底
 ├── scf_bootstrap     # 平台启动脚本（指向 index.js，未改动）
 ├── package.json      # 未改动（main 仍为 index.js）
 ├── lib/              # 基础设施层：不认识业务，只提供能力
-│   ├── config.js     #   ENV_ID / USER_ID / 一次最多 400 天 / limit 上限 1000 / 请求体上限 64KB
+│   ├── config.js     #   ENV_ID / USER_ID / 一次最多 400 天 / limit 上限 1000 / 请求体上限 64KB / ALLOWED_ORIGINS
 │   ├── errors.js     #   错误码字典 ERR（响应层与校验层共用）
 │   ├── db.js         #   getDb() 懒加载，全项目**唯一**创建数据库连接的地方
 │   ├── response.js   #   CORS 头 + sendJson/sendOk/sendFail/sendDbError/sendMethodNotAllowed
 │   ├── mappers.js    #   数据库 snake_case + NULL → API camelCase + ""
-│   ├── dates.js      #   isDateStr / daysBetween
+│   ├── dates.js      #   isDateStr / daysBetween / todayStr（GMT+8 的"服务器当天"）
 │   └── body.js       #   readJsonBody（把请求流读成 JSON 对象）
 ├── repositories/     # 数据访问层：**唯一的数据库查询出口**，文件名 = 表名
 │   ├── checkins.repository.js   # findAll / findByDate / existsByDate / saveCheckin
-│   └── settings.repository.js   # getSettings
+│   └── settings.repository.js   # getSettings / saveSettings（A3 的 upsert，冲突键 user_id）
 ├── validators/       # 校验层：只管「值合不合格」，不碰 HTTP、不碰数据库
-│   └── checkin.validator.js     # validateCheckin + 枚举 + 与前端 validate.js 同源的文案
+│   ├── checkin.validator.js     # validateCheckin + 枚举 + 与前端 validate.js 同源的文案
+│   └── settings.validator.js    # validateSettings（A3：两个目标值必填 + startDate 可选）
 └── handlers/         # 业务层：接请求 → 调函数 → 返响应，一个接口一个函数
     ├── health.js     # A1 GET /api/health
-    ├── settings.js   # A2 GET /api/settings
-    └── checkins.js   # A4 GET /api/checkins、A6 PUT /api/checkins/{date}
+    ├── settings.js   # A2 GET /api/settings、A3 PUT /api/settings
+    └── checkins.js   # A4 GET /api/checkins、A5 GET /api/checkins/{date}、A6 PUT /api/checkins/{date}
 ```
 
 ## 二、依赖方向（单向，不许反向引用）
@@ -66,9 +69,12 @@ index.js ──▶ handlers/ ──▶ repositories/ ──▶ lib/db.js ──�
 
 | 接口 | 要改哪里 | 要不要动 lib/ |
 |---|---|---|
-| A5 GET /api/checkins/{date} | 仓库层 `findByDate` 已有 → `handlers/checkins.js` 加分支 + `index.js` 放开路由 | 不用 |
-| A3 PUT /api/settings | `settings.repository.js` 加 `saveSettings` + `handlers/settings.js` 加 `handlePutSettings` + `index.js` 放开 PUT | 不用 |
+| ~~A5 GET /api/checkins/{date}~~ **✅ 已完成 2026-10-06** | 仓库层 `findByDate` 已有 → 只加了 `handleGetCheckin` + `index.js` 放开 GET | 不用 |
+| ~~A3 PUT /api/settings~~ **✅ 已完成 2026-10-06** | `settings.repository.js` 加 `saveSettings` + `handlers/settings.js` 加 `handlePutSettings` + `index.js` 放开 PUT；另新建 `validators/settings.validator.js` | 用了 `lib/dates.js` 的 `todayStr`（新增函数，别的层不受影响） |
 | A7 POST /api/checkins/import | 新建 `handlers/import.js` + 在 `checkins.repository.js` 加批量写 | 不用 |
+
+> A5 落地后的实测收获：写「读单日」时**没有新写查询代码**，直接复用了 A6 回读用的 `findByDate` ——
+> 这就是仓库层存在的意义（第二节的依赖方向保证 handler 拿到的永远是升序单行）。
 
 ## 六、背景
 

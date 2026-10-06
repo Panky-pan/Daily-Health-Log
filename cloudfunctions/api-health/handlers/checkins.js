@@ -114,4 +114,23 @@ async function handlePutCheckin(res, date, req) {
   return sendOk(res, { saved: true, isNew, record: checkinToApi(saved) });
 }
 
-module.exports = { handleListCheckins, handlePutCheckin };
+// A5 · GET /api/checkins/{date} —— 读单日记录（契约 4.6）
+//
+// 为什么「那天没记录」回 200 + record:null 而不是 404：
+//   「那天没打卡」是正常业务状态，不是错误（和 A2 的 settings:null 同一个理由）；
+//   而且 404 在本项目里已经被「路径不存在」占用了，混用前端没法区分。
+async function handleGetCheckin(res, date) {
+  // 路径参数先校验：日期格式错就没必要去打扰数据库（和 A4 一样的做法）
+  if (!isDateStr(date)) {
+    return sendFail(res, 400, ERR.INVALID_PARAM, "地址里的日期格式不对，应该写成 2026-09-21 这样");
+  }
+
+  // 仓库层的 findByDate 是 A6 写完回读时用的那一个，这里直接复用，不新增查询代码
+  const { row, error } = await checkinsRepo.findByDate(date);
+  if (error) return sendDbError(res, "GET /api/checkins/{date}", error);
+
+  // record 为 null = 那天确实没打卡（不是错误）；有记录时字段转换与 A4 走同一个映射
+  return sendOk(res, { record: row ? checkinToApi(row) : null });
+}
+
+module.exports = { handleListCheckins, handleGetCheckin, handlePutCheckin };

@@ -18,4 +18,13 @@ function daysBetween(from, to) {
   return Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86400000);
 }
 
-module.exports = { DATE_RE, isDateStr, daysBetween };
+// 「服务器当天」的日期字符串，按 GMT+8 算（A3 首次创建设置时取它当 startDate）。
+//
+// 为什么不直接 new Date().toISOString().slice(0, 10)：那是 **UTC** 日期。
+// 东八区凌晨 0 点到 8 点之间，UTC 日期还停在昨天，"今天"就算错了一整天 ——
+// 打卡类应用最致命的那类错位（硬约束 3）。本项目口径统一为北京时间。
+function todayStr(now = new Date()) {
+  return new Date(now.getTime() + 8 * 3600 * 1000).toISOString().slice(0, 10);
+}
+
+module.exports = { DATE_RE, isDateStr, daysBetween, todayStr };

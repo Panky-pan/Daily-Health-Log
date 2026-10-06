@@ -6,7 +6,7 @@
 >
 > **本文件的状态：读接口 + 写接口（A6 单日记录）已实现。**
 > 它是第 3 周建表、写接口的**唯一依据**；代码与本文档冲突时，以本文档为准；要改接口先改这里。
-> 进度（2026-10-03）：**A1 `GET /api/health`、A2 `GET /api/settings`、A4 `GET /api/checkins`、A6 `PUT /api/checkins/{date}` 已上线**（实现细节见 4.9）；两张表已建成（见 3.4）；A3 / A5 / A7 仍是占位登记。
+> 进度（2026-10-06）：**A1 `GET /api/health`、A2 `GET /api/settings`、A3 `PUT /api/settings`、A4 `GET /api/checkins`、A5 `GET /api/checkins/{date}`、A6 `PUT /api/checkins/{date}` 已上线**（实现细节见 4.9）；两张表已建成（见 3.4）；**7 个接口里 6 个已实现**，只剩 A7 `POST /api/checkins/import`（迁移专用，可延后）。
 
 ---
 
@@ -233,13 +233,13 @@ ALTER TABLE settings ADD CONSTRAINT settings_user_fk FOREIGN KEY (user_id) REFER
 |---|---|---|---|---|
 | A1 | GET | `/api/health` | 健康检查 | **已上线（2026-10-01）** |
 | A2 | GET | `/api/settings` | 读目标设置 | **已实现（2026-10-02）** |
-| A3 | PUT | `/api/settings` | 存 / 改目标设置 | 登记待实现 |
+| A3 | PUT | `/api/settings` | 存 / 改目标设置 | **已实现（2026-10-06）** |
 | A4 | GET | `/api/checkins` | **列表读取**：按日期区间取打卡记录（不传参＝取全部） | **已实现（2026-10-02）** |
-| A5 | GET | `/api/checkins/{date}` | 读单日记录 | 登记待实现（**注意**：A6 上线后，这个路径已存在，GET 它现在回 405 而不是 404，见 4.9） |
+| A5 | GET | `/api/checkins/{date}` | 读单日记录 | **已实现（2026-10-06）** |
 | A6 | PUT | `/api/checkins/{date}` | 保存 / 覆盖单日记录（upsert） | **已实现（2026-10-03）** |
 | A7 | POST | `/api/checkins/import` | 批量导入（本地数据迁移专用） | 登记待实现，**可延后** |
 
-> A2 / A4 / A6 的实现方式、凭证与踩坑记录见 **4.9**。
+> A2 / A4 / A5 / A6 的实现方式、凭证与踩坑记录见 **4.9**。
 
 > A6 是**唯一的写入口**：新建和覆盖都走它（upsert），前端不用判断该发 POST 还是 PUT。
 > 本契约**没有**"单条写入的 POST 接口"——POST 只出现在 A7（批量导入）。想用 POST 写单日记录的话，那是另一套设计，得先改契约。
@@ -330,6 +330,10 @@ ALTER TABLE settings ADD CONSTRAINT settings_user_fk FOREIGN KEY (user_id) REFER
 
 > 注意：这个接口**不做"新建 vs 更新"两种语义**，统一 upsert——单人场景只有一条设置，前端不用判断该调 POST 还是 PUT。
 
+> 状态：✅ 已实现（2026-10-06）。实现落点：新建 `validators/settings.validator.js`（两个目标值 + 可选 startDate）、`repositories/settings.repository.js` 加 `saveSettings`（upsert，冲突键 `user_id`）、`handlers/settings.js` 加 `handlePutSettings`，`index.js` 放开 PUT。
+> **依赖一条数据库权限**：`anon` 角色要有 `settings` 的 `INSERT, UPDATE` 与 `settings_id_seq` 序列 `USAGE`（与 4.9 结论 6 的两条 GRANT 同一批，2026-10-06 已执行）。
+> 验证（2026-10-06 实测）：`PUT {"goalExerciseMinutes":45,"goalWaterMl":2200}` → 200，`startDate` 仍是 `2026-09-21`；带 `startDate:"2026-01-01"` 试图覆盖 → 200，`startDate` **仍**是 `2026-09-21`（规则 2 生效）；`goalWaterMl:99999` → 400 `field:"goalWaterMl"`；`{}` → 400 `field:"goalExerciseMinutes"`；`POST` → 405。库内核对：`created_at` 保持首次时间不变、`updated_at` 随每次保存刷新。
+
 ---
 
 ### 4.5 A4 · GET /api/checkins　（列表读取，本契约的核心）
@@ -415,6 +419,9 @@ ALTER TABLE settings ADD CONSTRAINT settings_user_fk FOREIGN KEY (user_id) REFER
 **错误返回**：`date` 格式非法 → 400 `INVALID_PARAM`；数据库异常 → 500 `DB_ERROR`。
 
 > 与 TECH_DESIGN 3.3 的 B7（写的是"单日记录或 404"）有一处调整：**这里用 200 + `record:null` 取代 404**。理由同 A2——"那天没打卡"是正常业务状态而非错误，且 404 与"网关路径不存在"的 404 混在一起，前端无法区分是哪种。第 3 周按本契约实现。
+
+> 状态：✅ 已实现（2026-10-06）。实现落点：`handlers/checkins.js` 的 `handleGetCheckin`——**复用 A6 写完回读用的同一个 `findByDate`**，没有新增查询代码；`index.js` 的 `/api/checkins/{date}` 分支放开 GET（PUT 保持不变）。仓库层的"排序 / 条数"规矩在这一层不参与，单日读取天然只有一行。
+> 验证（2026-10-06 实测）：`<API_BASE>/api/checkins/2026-10-06` → 200 + 当天完整记录；`<API_BASE>/api/checkins/2026-10-03` → 200 `{"record":null}`；`<API_BASE>/api/checkins/20261003` → 400 `INVALID_PARAM`；`POST <API_BASE>/api/checkins/2026-09-21` → 405（路径对、方法不对）。
 
 ---
 
@@ -503,7 +510,7 @@ ALTER TABLE settings ADD CONSTRAINT settings_user_fk FOREIGN KEY (user_id) REFER
 
 ---
 
-### 4.9 接口实现现状（2026-10-03）
+### 4.9 接口实现现状（2026-10-06 更新）
 
 > 本节记录「代码到底怎么写的」，供后来接手的人排查；**接口形状仍以 4.2~4.8 为准**。
 
@@ -512,15 +519,17 @@ ALTER TABLE settings ADD CONSTRAINT settings_user_fk FOREIGN KEY (user_id) REFER
 | 路由 | 状态 |
 |---|---|
 | `GET /api/health` | 已上线（2026-10-01） |
-| `GET /api/settings` | 已上线（2026-10-02） |
-| `GET /api/checkins` | 已上线（2026-10-02） |
+| `GET /api/settings` | 已上线（2026-10-02），A2 |
+| `PUT /api/settings` | 已上线（2026-10-06），A3 |
+| `GET /api/checkins` | 已上线（2026-10-02），A4 |
 | `PUT /api/checkins/{date}` | 已上线（2026-10-03），A6 |
-| 其余方法（如对 `/api/checkins/{date}` 发 GET / POST） | 405 `METHOD_NOT_ALLOWED` |
-| `/api/checkins/import`（A7）与其它未登记路径 | 404 `NOT_FOUND` |
+| `GET /api/checkins/{date}` | 已上线（2026-10-06），A5 |
+| 其余方法（如对 `/api/checkins/{date}` 或 `/api/settings` 发 POST / DELETE） | 405 `METHOD_NOT_ALLOWED` |
+| `/api/checkins/import`（A7）、`/api/checkins/`（后面没跟日期）与其它未登记路径 | 404 `NOT_FOUND` |
 
-> **一处状态变化（2026-10-03）**：`GET /api/checkins/2026-09-21` 从 404 变成了 **405**。
-> 原因：A6 上线后这个**路径已经存在**了，只是 GET 不是它的合法方法。按 2.3 的码表，这正是 405 的定义。
-> A5 仍登记待实现；等 A5 做完，这个地址的 GET 会变成 200。
+> **两处状态变化（别被旧记录误导）**：
+> ①（2026-10-03）`GET /api/checkins/2026-09-21` 从 404 变成了 **405** —— A6 上线后这个**路径已经存在**了，只是当时 GET 不是它的合法方法；
+> ②（2026-10-06）同一个地址的 GET 变成 **200** —— A5 上线，这个地址现在两种方法都合法（GET 读单日 / PUT 写单日）。
 
 **网关路由**：域名下只保留一条 **`/api`**（前缀匹配 + `enablePathTransmission: true`，即完整路径透传给函数）。曾经的单条 `/api/health` 路由已删除——**路由是按路径一条条建的，不放开就会连函数都进不去**。
 
@@ -549,6 +558,10 @@ ALTER TABLE settings ADD CONSTRAINT settings_user_fk FOREIGN KEY (user_id) REFER
    对照事实：`authenticated` / `service_role` 两个角色建表时就带完整读写权限，缺的只是 `anon` 这一份；本期没有登录，云函数只能以 `anon` 身份连库。
    **代价与二期动作**：Publishable Key 属于「可公开」类密钥，开了写权限后，**拿到它就能绕过云函数直接写库**（不过本期接口本来就无鉴权，见 2.5，风险增量有限）。二期接登录时必须连本带利收回：启用 RLS + 把写入口改成 `authenticated`，`anon` 只留 `SELECT`。
    > 排查手法（记下来）：临时让 `sendDbError` 把原始错误塞进响应 message 里，就能在 curl 输出里直接看到 `code`/`message`，不用等日志。查完立刻改回去，别留在线上。
+7. **`settings.start_date` 是 NOT NULL 且没有默认值，所以 upsert 时必须每次都带上它**（2026-10-06 做 A3 时踩到，第一次调用直接 500 `DB_ERROR`）：
+   一开始照 A6 的思路想「不把它放进列清单 = 覆盖时不动它」，**这是错的**——PG 的 `INSERT ... ON CONFLICT DO UPDATE` 是先构造 INSERT tuple、再判冲突，`NOT NULL` 检查发生在冲突判定**之前**，所以"不出现"不是"不改"，而是"插不进去"。
+   （A6 的 `saveCheckin` 没踩到：checkins 的 `NOT NULL` 列 `user_id` / `date` 本来就在 values 里，其余业务列都可空、`created_at` 靠 DEFAULT。）
+   **最终做法**：handler 先读现状，**已存在就把库里的原值原样传回**给 upsert——外部行为仍然是"改目标不影响 `startDate`"（契约 3.3 规则 2），值没变，坚持率分母就不动。同理，`start_date` 有了第一次值之后，**前端传什么都改不了它**（实测带 `startDate:"2026-01-01"` 的请求返回的仍是 `2026-09-21`）。
 
 **接口是实时查库、没有缓存**：改一条数据，下次请求立刻反映。验证闭环（2026-10-02 实测通过）：
 
@@ -594,10 +607,18 @@ curl -s -X PUT "$B/api/checkins/2026-10-03" -H 'Content-Type: application/json' 
 | `<API_BASE>/api/checkins?from=2026-10-01&to=2026-09-01` | 400 `INVALID_PARAM` |
 | `<API_BASE>/api/checkins?limit=3` | 200，3 条（最新 3 天：09-28 / 09-29 / 10-01），仍为升序 |
 | `<API_BASE>/api/checkins?limit=0` | 400 `INVALID_PARAM` |
-| `GET <API_BASE>/api/checkins/2026-09-21` | **405 `METHOD_NOT_ALLOWED`**（2026-10-03 起：路径已存在，A5 还没做） |
+| `GET <API_BASE>/api/checkins/2026-09-21` | 200，`data.record` 是那天的完整记录（2026-10-06 起 A5 已实现；在此之前是 405） |
+| `GET <API_BASE>/api/checkins/2026-10-03` | 200 `{"ok":true,"data":{"record":null}}` —— 那天没打卡是正常状态，不是错误（契约 4.6） |
+| `GET <API_BASE>/api/checkins/20261003` | 400 `INVALID_PARAM`（日期格式错，与 A6 同一套校验） |
 | `PUT <API_BASE>/api/checkins/2026-10-03` + `{}` | 400 `VALIDATION_ERROR`，`field: "record"` |
 | `PUT <API_BASE>/api/checkins/20261003` + 任意体 | 400 `INVALID_PARAM`（日期格式） |
 | `POST <API_BASE>/api/checkins/import` | 404 `NOT_FOUND`（A7 未实现） |
+| `PUT <API_BASE>/api/settings` + `{"goalExerciseMinutes":30,"goalWaterMl":2000}` | 200，返回保存后的完整设置；**`startDate` 保持首次那个值不变** |
+| `PUT <API_BASE>/api/settings` + `{"goalExerciseMinutes":30,"goalWaterMl":2000,"startDate":"2026-01-01"}` | 200，但 `startDate` **仍是**原值（规则 2：写了就永不覆盖） |
+| `PUT <API_BASE>/api/settings` + `{"goalExerciseMinutes":30,"goalWaterMl":99999}` | 400 `VALIDATION_ERROR`，`field:"goalWaterMl"` |
+| `PUT <API_BASE>/api/settings` + `{}` | 400 `VALIDATION_ERROR`，`field:"goalExerciseMinutes"` |
+| `PUT <API_BASE>/api/settings` + `{"goalExerciseMinutes":30,"goalWaterMl":2000,"startDate":"2026-13-01"}` | 400 `VALIDATION_ERROR`，`field:"startDate"` |
+| `POST <API_BASE>/api/settings` | 405 `METHOD_NOT_ALLOWED` |
 
 **部署方式**：改写 `cloudfunctions/api-health/` 下的代码后，重新上传该函数目录（依赖 `node_modules` 随包或由平台安装均可，函数已开 `InstallDependency`）。**改完代码必须重新部署，只改本地文件线上不会变。**
 
@@ -611,7 +632,7 @@ curl -s -X PUT "$B/api/checkins/2026-10-03" -H 'Content-Type: application/json' 
 |---|---|---|---|
 | `welcome.html` 开屏 | 无 | **无接口**（按钮仅跳转） | — |
 | `index.html` 今日页 | 目标、今天是否已打卡、全部记录（算 streak） | A2 + A4 | 当前 streak、历史最长、提醒条差值 |
-| `checkin.html` 打卡页 | 目标（判是否已设置）、当天记录（回填） | A2 + A5（或从 A4 里挑当天） | 卡路里（`calories.js` 本地算，随 A6 一起提交） |
+| `checkin.html` 打卡页 | 目标（判是否已设置）、当天记录（回填） | A2 + A5 | 卡路里（`calories.js` 本地算，随 A6 一起提交） |
 | `history.html` 历史页 | 全部记录、目标（startDate 算坚持率） | A2 + A4 | 日历标记、streak、历史最长、坚持率、饮食健康分、标签筛选命中 |
 | `trends.html` 趋势页 | 全部记录 | A4 | 体重折线、周运动柱状（近 4~8 周） |
 
@@ -640,7 +661,7 @@ curl -s -X PUT "$B/api/checkins/2026-10-03" -H 'Content-Type: application/json' 
 | # | 事项 | 依据 | 备注 |
 |---|---|---|---|
 | 1 | 在 PostgreSQL 里建 `checkins` / `settings` 两张表 | `db/schema.sql` | **已完成（2026-10-01）**：脚本与示例数据已生成，执行步骤、验证 SELECT、报错对照见 `db/README.md` |
-| 2 | 写 A2/A3/A4/A5/A6 五个接口（A7 可延后） | 本文档第四节 | **过半（2026-10-03）**：A2 / A4 / **A6** 已上线（见 4.9）；剩余顺序：**A5 → A3**（A5 更急，打卡页回填当天记录要用） |
+| 2 | 写 A2/A3/A4/A5/A6 五个接口（A7 可延后） | 本文档第四节 | **✅ 五个全部完成（2026-10-06）**：A2 / A3 / A4 / A5 / A6 均已上线（见 4.9）。A3 的权限前置（`settings` 表的 INSERT/UPDATE + `settings_id_seq` USAGE）也已于当日执行 |
 | 3 | 把 `api-health` 的错误分支形状统一成 `{ok:false,error:{code,message}}` | 本文档 2.2 | **已完成（2026-10-02）**：404 / 405 / 400 / 500 全部统一；A1 的成功响应形状按 2.2 的例外保持不变。**2026-10-03 补充**：A6 上线带回 400 `VALIDATION_ERROR`（带 `field`），也走同一形状 |
 | 4 | 前端接接口：页面读真库数据 | 本文档 4.5 末注 | **读已完成（2026-10-02）**：改的是 `storage.js`（加云端覆盖层）+ 新增 `api-source.js`，四个页面各改一行启动方式；`state.js` / `history.js` / `stats.js` 未动。**写仍未接**：A6 已上线，但打卡页还是先写本地（`storage.js`），前端接 A6 是下一步待办 |
 | 5 | 处理 CORS（浏览器首次发请求时） | 本文档 2.7 | **已具备（2026-10-02，2026-10-03 补 PUT）**：云函数只回 `Allow-Methods`（含 `PUT`）/ `Allow-Headers`，`Allow-Origin` 交给网关；OPTIONS 预检回 204。实测见 4.9 |
@@ -658,6 +679,8 @@ curl -s -X PUT "$B/api/checkins/2026-10-03" -H 'Content-Type: application/json' 
 | v1.2 | 2026-10-02 | **A2 / A4 已实现并上线**：新增 **4.9「接口实现现状」**（云函数单入口路由表、网关 `/api` 前缀路由与 `INVALID_PATH` 排查法、SDK 必填 `database: "public"`、凭证改用 Publishable Key 及 `api_key` 被网关拒收的实测结论、`unhandledRejection` 兜底、`user_id` 固定过滤、实时查库验证闭环、线上验证清单、部署方式）；2.1 基地址说明更新为 `/api` 前缀路由；4.2 补 A1 错误形状已统一；4.3 / 4.5 补状态与验证地址；4.1 总表状态更新；第七节第 2 / 3 / 5 项更新 |
 | v1.3 | 2026-10-02 | **A4 新增 `limit` 查询参数**（返回条数上限，取最新 N 条、响应仍升序，取值 1~1000，越界与非数字均 400）；4.5 参数表与校验规则同步；4.9 验证清单补两条 |
 | v1.4 | 2026-10-02 | **前端接接口完成**（契约 4.5 末注、第七节第 4 项）：新增取数层 `assets/js/api-source.js`，`storage.js` 加「云端覆盖层」（只走内存、不覆盖本地数据），四个页面各改一行启动方式；**2.7 CORS 按实测重写**（云函数不要自写 `Allow-Origin`，网关会拼成非法多值导致 `Failed to fetch`）；4.9 补第 5 条结论；页面映射表补接入进度；四个页面 + 开屏页页脚文案由「数据只存在浏览器里」改为「页面记录来自云端；新打卡先存在本机」 |
+| v1.7 | 2026-10-06 | **A3 `PUT /api/settings` 实现并上线，7 个接口里 6 个已实现**：新建 `validators/settings.validator.js`；`repositories/settings.repository.js` 加 `saveSettings`（upsert，冲突键 `user_id`）；`handlers/settings.js` 加 `handlePutSettings`；`lib/dates.js` 加 `todayStr()`（按 GMT+8 取"服务器当天"，避免 UTC 错位）；`index.js` 放开 PUT。4.4 补状态与验证清单；4.1 / 4.9 / 第七节状态更新；**4.9 新增第 7 条踩坑：`settings.start_date` NOT NULL 无默认值，upsert 时必须每次都带上，"不覆盖"靠 handler 回填原值实现，不能靠"列清单里不放它"**；权限前置两条 GRANT（settings 表 + settings_id_seq）当日执行 |
+| v1.6 | 2026-10-06 | **A5 `GET /api/checkins/{date}` 实现并上线**：`handlers/checkins.js` 加 `handleGetCheckin`（复用 A6 回读用的 `findByDate`，未新增查询代码）+ `index.js` 路由放开 GET；4.6 补状态、实现落点与三条验证；4.1 总表状态更新；4.9 补路由表、状态变化②（该地址 GET 由 405 变 200）、验证清单三条；第五节去掉「或从 A4 里挑当天」的备选说法；第七节第 2 项剩 A3 并登记其权限前置条件 |
 | v1.5 | 2026-10-03 | **A6 `PUT /api/checkins/{date}` 实现并上线（本契约唯一的写入口）**：4.7 补实现细节（字段全量提交＝整条覆盖、`date` 可不带但要与路径一致、卡路里不算"内容"、空体与非法 JSON 的处理、路径日期错走 `INVALID_PARAM`）与状态；4.1 总表状态更新并**明确"本契约没有单条写入的 POST"**；4.9 路由表补 A6、补**第 6 条踩坑（`anon` 角色默认只有 SELECT，写库要 GRANT INSERT/UPDATE + 序列 USAGE）**、补 A6 三条 curl 测试命令与 SQL 核对方法；**验证清单里 `GET /api/checkins/{date}` 的预期由 404 改为 405**（路径因 A6 而存在）；第七节第 2 / 4 / 5 项更新、**新增第 7 项（anon 写权限，含二期收回动作）** |
 
 ---

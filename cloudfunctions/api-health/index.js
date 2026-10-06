@@ -7,8 +7,13 @@
 //   已实现：
 //     A1  GET /api/health            健康检查（响应形状是契约的唯一例外，不带 data 包裹）
 //     A2  GET /api/settings          读目标设置（表 settings，单人只有一条）
+//     A3  PUT /api/settings          存 / 改目标设置（upsert；startDate 首次写入后永不覆盖）
 //     A4  GET /api/checkins          列表读取打卡记录（表 checkins，一天一条）
-//     A6  PUT /api/checkins/{date}   保存 / 覆盖单日记录（唯一的写入口）
+//     A5  GET /api/checkins/{date}   读单日记录（那天没打卡回 200 + record:null）
+//     A6  PUT /api/checkins/{date}   保存 / 覆盖单日记录（打卡记录唯一的写入口）
+//
+//   未实现（契约登记待做）：
+//     A7  POST /api/checkins/import  批量导入（本地数据迁移专用，可延后）
 //
 // 目录分层（本文件是唯一的路由表，别处不许再写路由）：
 //   handlers/     接请求、调 repository、返响应
@@ -29,8 +34,8 @@ const { CORS_HEADERS, sendFail, sendMethodNotAllowed } = require("./lib/response
 const { ERR } = require("./lib/errors");
 const { ALLOWED_ORIGINS } = require("./lib/config");
 const { handleHealth } = require("./handlers/health");
-const { handleGetSettings } = require("./handlers/settings");
-const { handleListCheckins, handlePutCheckin } = require("./handlers/checkins");
+const { handleGetSettings, handlePutSettings } = require("./handlers/settings");
+const { handleListCheckins, handleGetCheckin, handlePutCheckin } = require("./handlers/checkins");
 
 // ---------------------------------------------------------------------------
 // CORS 白名单（2026-10-06 方案 A）：读写接口一律校验来源
@@ -87,9 +92,10 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (path === "/api/settings") {
-      // A3（PUT）今天还没做，所以除了 GET 都回 405
-      if (req.method !== "GET") return sendMethodNotAllowed(res, req.method);
-      return await handleGetSettings(res);
+      // A2 读 / A3 写（upsert，单人只有一条设置）
+      if (req.method === "GET") return await handleGetSettings(res);
+      if (req.method === "PUT") return await handlePutSettings(res, req);
+      return sendMethodNotAllowed(res, req.method);
     }
 
     if (path === "/api/checkins") {
@@ -98,17 +104,20 @@ const server = http.createServer(async (req, res) => {
       return await handleListCheckins(res, url.searchParams);
     }
 
-    // A6 · /api/checkins/{date}：保存 / 覆盖单日记录
+    // A5 · GET /api/checkins/{date}（读单日）/ A6 · PUT（保存 / 覆盖单日）
     if (path.startsWith("/api/checkins/")) {
       const rest = path.slice("/api/checkins/".length);
       // A7 批量导入（POST /api/checkins/import）登记待实现，先当路径不存在（契约 4.8）
       if (rest === "import") return sendFail(res, 404, ERR.NOT_FOUND, "没有这个接口");
-      // 路径对、方法不对（比如 GET 或 POST 这个地址）→ 405（契约 2.3）
+      // 只写到 /api/checkins/、后面没跟日期：这不是任何已登记的路径（契约 2.3 的 404）
+      if (rest === "") return sendFail(res, 404, ERR.NOT_FOUND, "没有这个接口");
+      if (req.method === "GET") return await handleGetCheckin(res, rest);
+      // 路径对、方法不对（比如 POST 这个地址）→ 405（契约 2.3）
       if (req.method !== "PUT") return sendMethodNotAllowed(res, req.method);
       return await handlePutCheckin(res, rest, req);
     }
 
-    // 路径不存在（含还没实现的 A5 GET /api/checkins/{date}、A3 /api/settings 的 PUT）
+    // 路径不存在（含还没实现的 A7 POST /api/checkins/import）
     return sendFail(res, 404, ERR.NOT_FOUND, "没有这个接口");
   } catch (e) {
     console.error("[api-health] 未捕获异常:", e);

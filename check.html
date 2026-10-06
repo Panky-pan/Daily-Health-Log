@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>检查台 · Daily-Health-Log</title>
+<link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+
+<div class="container">
+
+  <!-- 检查台是开发用的自测页，不进主导航（和 checkin.html 一个做法：只留一个返回入口），
+       这样不用改其它四页的导航，也就不会影响已上线的页面。 -->
+  <header class="site-header page-header">
+    <a class="page-back" href="index.html">← 返回今日</a>
+    <div class="site-title">检查台</div>
+  </header>
+
+    <main>
+
+      <!-- 最后更新时间（余力加练，2026-10-06）：一行小结，摆在三张卡上面。
+           显示两件事——这次检查发生在几点、库里最新一条记录是哪天。
+           点「重新检查」「刷新数据」或写完一次测试，它都会自动重算，
+           所以看到的是「眼前这份数据有多新」，不是页面上写死的日期。 -->
+      <p class="check-updated" id="last-updated">正在算最后更新时间…</p>
+
+      <!-- ① 健康状态：接口活着没有 -->
+    <section class="card">
+      <h2 class="card-title">服务健康状态</h2>
+      <p class="check-line">
+        <span class="check-dot check-dot-load" id="health-dot" aria-hidden="true"></span>
+        <span id="health-text">正在问接口…</span>
+      </p>
+      <p class="card-hint" id="health-meta"></p>
+      <p class="field-error" id="health-error" hidden></p>
+      <button type="button" class="btn btn-ghost" id="btn-health">重新检查</button>
+    </section>
+
+    <!-- ② 核心表真实数据：把 checkins 表里的东西直接摊开看 -->
+    <section class="card">
+      <h2 class="card-title">数据库里的真实记录</h2>
+      <p class="card-hint" id="checkins-meta">正在取数据…</p>
+      <div id="checkins-box"></div>
+      <button type="button" class="btn btn-ghost" id="btn-reload">刷新数据</button>
+    </section>
+
+    <!-- ③ 写入测试：真往云端写一条，证明写接口通
+         写入是「覆盖保存」：那天已有记录会被替换，所以默认给一个安全日期，
+         并且写之前会再确认一次（AGENTS.md 第八条：动数据前先确认）。 -->
+    <section class="card">
+      <h2 class="card-title">写入测试</h2>
+      <p class="card-hint">
+        内容是固定的一份样例，点按钮就真的写进云端数据库。
+        <strong>写入是覆盖保存</strong>——选中的那天如果已经有记录，会被这份样例替换掉，所以先挑个没记录的日期。
+      </p>
+
+      <div class="form-row">
+        <label for="write-date">写进哪一天</label>
+        <input type="date" id="write-date">
+        <p class="card-hint" id="write-date-hint"></p>
+      </div>
+
+      <p class="card-hint" id="write-preview"></p>
+      <p class="field-error" id="write-error" hidden></p>
+      <p class="checkin-status" id="write-status" hidden></p>
+      <button type="button" class="btn" id="btn-write">写入测试</button>
+    </section>
+
+  </main>
+
+  <footer class="page-footer">这是开发自测页，写入会真的进数据库；日常记录请用「今日」页。</footer>
+
+</div>
+
+<script src="assets/js/storage.js"></script>
+<script src="assets/js/api-source.js"></script>
+<script src="assets/js/check.js"></script>
+
+</body>
+</html>

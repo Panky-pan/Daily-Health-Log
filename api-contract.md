@@ -73,6 +73,7 @@
 | 400 | `VALIDATION_ERROR` | 字段值不合法（体重 500、时长 -5 等），带 `field` | 在该输入框旁显示红字，不保存（PRD E5/B2） |
 | 400 | `INVALID_PARAM` | 路径/查询参数本身格式错（日期不是 `YYYY-MM-DD`、`from` 晚于 `to`、区间超 400 天） | 通用提示「请求参数不对」，属开发期错误，正常用户碰不到 |
 | 401 | `UNAUTHORIZED` | 未登录或登录失效（二期启用，本期不出现） | 清本地登录态 → 跳登录页（TECH_DESIGN 3.4） |
+| 403 | `FORBIDDEN` | 请求带了 Origin 且不在白名单（2026-10-06 起，见 2.7） | 正常用户碰不到；只有别的网站想跨域调接口才会出现 |
 | 404 | `NOT_FOUND` | 请求的**路径**不存在 | 开发期错误提示 |
 | 405 | `METHOD_NOT_ALLOWED` | 路径对但方法不对（如对 `/api/checkins/2026-10-01` 发 POST） | 开发期错误提示 |
 | 500 | `DB_ERROR` | 数据库连接失败、查询报错 | 「记录暂时取不出来，稍后再试」+ 重试按钮（对齐四态里的失败态） |
@@ -113,7 +114,14 @@
 网关（响应头 `server: tcbgw`）会回 `access-control-allow-credentials: true` 与 `access-control-allow-origin: <请求的 Origin>`；云函数若再写一个 `*`，网关会拼成 `http://xxx,*` 这种非法多值（带 `credentials: true` 时 `Allow-Origin` 不允许是 `*`，更不允许逗号多值），浏览器直接判跨域失败，前端只看到 `Failed to fetch`。
 
 现状：云函数只保留 `Allow-Methods` / `Allow-Headers`，`Allow-Origin` 交给网关；实测四个页面均能正常取数。
-**原计划"放行静态托管域名"的做法作废**——不需要白名单，网关按请求来源回显。
+
+**2026-10-06 修正（方案 A，取代上一段"作废"结论）**：网关回显等于「对所有域名开放跨域」，与「接口只服务自己的页面」目标冲突，且响应头层面拦不住（上面实测过）。改为**服务端校验 Origin**：
+
+- 请求带 `Origin` 且不在白名单 → **403 `FORBIDDEN`**，读写接口一律生效，先于路由与 OPTIONS 预检（预检被 403，浏览器就不会再发真请求）；
+- 白名单 = 静态托管线上域名 + `localhost` / `127.0.0.1` 任意端口（本地调试，`python -m http.server` / Live Server 端口不固定）+ `null`（本地 `file://` 双击打开 HTML）；
+- 不带 `Origin` 的请求（curl / Postman / 服务端脚本）放行——它们不受浏览器同源策略约束，本期单人自用不做更重鉴权（见 2.5）；
+- `Access-Control-Allow-Origin` 仍然交给网关回显，云函数自己依旧不写（防拼接非法多值，见上文实测）。
+- 白名单出处：云函数 `lib/config.js` 的 `ALLOWED_ORIGINS` + `index.js` 的 `originAllowed()`（本机地址正则单独放行）。
 
 ---
 

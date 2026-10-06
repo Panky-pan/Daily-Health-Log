@@ -27,9 +27,26 @@ const { URL } = require("url");
 
 const { CORS_HEADERS, sendFail, sendMethodNotAllowed } = require("./lib/response");
 const { ERR } = require("./lib/errors");
+const { ALLOWED_ORIGINS } = require("./lib/config");
 const { handleHealth } = require("./handlers/health");
 const { handleGetSettings } = require("./handlers/settings");
 const { handleListCheckins, handlePutCheckin } = require("./handlers/checkins");
+
+// ---------------------------------------------------------------------------
+// CORS 白名单（2026-10-06 方案 A）：读写接口一律校验来源
+// ---------------------------------------------------------------------------
+// 背景：CloudBase 网关会自动回显请求的 Origin 并带 credentials，等于「对所有
+// 域名开放跨域」，响应头层面拦不住（见 lib/response.js 踩坑注释与契约 2.7）。
+// 所以在服务端拦：带 Origin 且不在白名单 → 403，一个字节的数据都不给。
+// 不带 Origin 的请求（curl / Postman / 服务端脚本）放行：它们不受浏览器同源
+// 策略约束，校验 Origin 没有意义，本期单人自用不做更重的鉴权（见契约 2.5）。
+function originAllowed(req) {
+  const origin = req.headers.origin;
+  if (!origin) return true; // 非浏览器请求（curl 等），放行
+  if (ALLOWED_ORIGINS.includes(origin)) return true; // 线上域名 + file:// 的 "null"
+  // 本地开发：python -m http.server / Live Server 端口不固定，放行所有本机地址
+  return /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
+}
 
 // ---------------------------------------------------------------------------
 // 进程级兜底
@@ -48,6 +65,11 @@ process.on("unhandledRejection", (reason) => {
 // ---------------------------------------------------------------------------
 
 const server = http.createServer(async (req, res) => {
+  // CORS 白名单：名单外的来源（含它发的预检请求）一律 403，先于所有路由与 OPTIONS
+  if (!originAllowed(req)) {
+    return sendFail(res, 403, ERR.FORBIDDEN, "这个来源不在允许名单里");
+  }
+
   // 浏览器跨域预检请求（OPTIONS）直接放行
   if (req.method === "OPTIONS") {
     res.writeHead(204, CORS_HEADERS);

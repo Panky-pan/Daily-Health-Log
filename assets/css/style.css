@@ -1092,3 +1092,95 @@ body {
     to   { opacity: 1; transform: translateY(0); }
   }
 }
+
+/* ============================================
+   检查台（check.html）专用样式 · 2026-10-06 新增
+   颜色一律走 :root 里的变量，不写死色值；
+   状态灯只用「灰=等待 / 绿=正常 / 红=失败」三色，不借用黄/淡绿那些语义色。
+   ============================================ */
+
+/* ---- 状态行 + 状态灯 ---- */
+.check-line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.check-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  flex: 0 0 auto;                 /* 不被 flex 压扁 */
+  background: var(--color-muted);
+}
+.check-dot-ok  { background: var(--color-green); }
+.check-dot-bad { background: var(--color-danger); }
+
+/* 等待中：呼吸灯。只在用户没关动效时才闪 */
+@media (prefers-reduced-motion: no-preference) {
+  .check-dot-load { animation: dot-pulse 1s ease-in-out infinite; }
+  @keyframes dot-pulse {
+    0%, 100% { opacity: 1; }
+    50%      { opacity: 0.35; }
+  }
+}
+
+/* ---- 数据表：窄屏横向滚动，不撑破 360px ---- */
+.table-scroll {
+  overflow-x: auto;
+  margin: 12px 0;
+  -webkit-overflow-scrolling: touch;
+}
+.data-table {
+  width: 100%;
+  min-width: 420px;              /* 窄屏时靠横向滚动，不硬挤列 */
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.data-table th,
+.data-table td {
+  padding: 8px 10px;
+  text-align: left;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--color-border);
+}
+.data-table th {
+  color: var(--color-muted);
+  font-weight: 600;
+}
+.data-table tr:last-child td { border-bottom: none; }
+
+/* ---- 空态 / 出错态（最容易漏的两档，必须有明确文案而不是空白） ---- */
+.check-empty {
+  font-size: 14px;
+  color: var(--color-muted);
+  background: var(--color-green-pale);
+  border-radius: var(--radius-sm);
+  padding: 14px 16px;
+}
+.check-empty a { color: var(--color-green); }
+.check-empty-bad {
+  background: transparent;
+  border: 1px solid var(--color-danger);
+  color: var(--color-danger);
+}
+
+/* ---- 最后更新时间（余力加练，2026-10-06）：一行小结，不抢三张卡的视觉重心 ---- */
+.check-updated {
+  margin: 0 0 16px;
+  font-size: 14px;
+  color: var(--color-muted);
+}
+
+/* ---- 手机端：字号提一档，行高一点好点 ---- */
+@media (max-width: 480px) {
+  .data-table { font-size: 14px; }
+  .data-table th,
+  .data-table td { padding: 10px 12px; }
+  .check-line { font-size: 17px; }
+  .check-updated { font-size: 13px; }
+}
+

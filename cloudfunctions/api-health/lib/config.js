@@ -21,10 +21,23 @@ const MAX_LIMIT = 1000;
 // 超过就直接拒绝，不给内存压力。
 const MAX_BODY_BYTES = 64 * 1024;
 
+// CORS Origin 白名单（2026-10-06 方案 A「读写都校验」，见 api-contract.md 2.7）：
+// CloudBase 网关会自动回显任意 Origin（等于对所有域名开放跨域），响应头层面拦不住，
+// 所以在服务端拦：带 Origin 且不在名单内 → 403。名单含义：
+//   [0] 静态托管的线上地址（前端页面访问接口时的真实来源）
+//   [1] "null" —— 本地双击打开 HTML（file://）时浏览器发的 Origin 就是字符串 "null"
+// localhost / 127.0.0.1 的**任意端口**在 index.js 的 originAllowed() 里单独放行
+//（本地调试用 python -m http.server / Live Server，端口不固定，写死会误伤自己）。
+const ALLOWED_ORIGINS = [
+  "https://daily-health-log-daily-health-log-d3eej7197499a30.webapps.tcloudbase.com",
+  "null",
+];
+
 module.exports = {
   ENV_ID,
   USER_ID,
   MAX_RANGE_DAYS,
   MAX_LIMIT,
   MAX_BODY_BYTES,
+  ALLOWED_ORIGINS,
 };

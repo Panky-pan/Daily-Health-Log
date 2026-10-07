@@ -67,9 +67,58 @@
       <button type="button" class="btn" id="btn-write">写入测试</button>
     </section>
 
+    <!-- ④ 局部修改测试（PATCH）：和上面那张卡刚好是一对反照
+         写入是「整条覆盖」，局部修改是「只发要改的那几个字段，其余列原样不动」。
+         样例内容固定，但页面上会显示这次到底会发出什么请求体，方便对照数量。 -->
+    <section class="card">
+      <h2 class="card-title">局部修改测试（PATCH）</h2>
+      <p class="card-hint">
+        只改一天里的某几项，<strong>没提到的列数据库里原样不动</strong>。
+        对比上面那张卡：写入是整条覆盖，这里只发要改的字段。
+        <strong>也只改已有的记录</strong>——那天还没记录的话，接口会回 404。
+      </p>
+
+      <div class="form-row">
+        <label for="patch-date">改哪一天</label>
+        <input type="date" id="patch-date">
+        <p class="card-hint" id="patch-date-hint"></p>
+      </div>
+
+      <div class="form-row">
+        <label for="patch-preset">改什么（固定样例）</label>
+        <select id="patch-preset"></select>
+      </div>
+
+      <p class="card-hint" id="patch-preview"></p>
+      <p class="field-error" id="patch-error" hidden></p>
+      <p class="checkin-status" id="patch-status" hidden></p>
+      <button type="button" class="btn" id="btn-patch">局部修改测试</button>
+    </section>
+
+    <!-- ⑤ 删除测试（DELETE）：全页唯一不可恢复的操作
+         所以按钮是红的（红＝危险），点下去还要再弹一次确认（AGENTS.md 第八条）。
+         删掉的记录没法从页面上找回，只能重新打卡记一遍。 -->
+    <section class="card">
+      <h2 class="card-title">删除测试</h2>
+      <p class="card-hint">
+        真把某一天的整条记录从云端数据库里删掉，<strong>删了就回不来了</strong>——
+        页面上没有「撤销」，只能重新打卡再记一遍。所以按钮是红的，点下去还会再问一次。
+      </p>
+
+      <div class="form-row">
+        <label for="delete-date">删哪一天</label>
+        <input type="date" id="delete-date">
+        <p class="card-hint" id="delete-date-hint"></p>
+      </div>
+
+      <p class="field-error" id="delete-error" hidden></p>
+      <p class="checkin-status" id="delete-status" hidden></p>
+      <button type="button" class="btn btn-danger" id="btn-delete">删除测试</button>
+    </section>
+
   </main>
 
-  <footer class="page-footer">这是开发自测页，写入会真的进数据库；日常记录请用「今日」页。</footer>
+  <footer class="page-footer">这是开发自测页，写入 / 修改 / 删除都会真的落到数据库；日常记录请用「今日」页。</footer>
 
 </div>
 

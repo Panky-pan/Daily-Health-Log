@@ -5,7 +5,10 @@
    1. 读：页面打开时去云端的两个读接口取一次真实数据，取到后
       交给 storage.js 的「云端覆盖层」，页面照旧从 dhlStorage 读数；
    2. 写：打卡页保存时调 saveCheckin()，把这一天的记录 PUT 到云端
-      （A6 PUT /api/checkins/{date}，upsert 覆盖）。
+      （A6 PUT /api/checkins/{date}，upsert 全量覆盖）；
+   3. 改 / 删（2026-10-07 新增，目前只有检查台 check.html 在用）：
+      patchCheckin()  只改指定的那几个字段（A8 PATCH），其余列原样保留；
+      deleteCheckin() 删掉某天的整条记录（A9 DELETE，**删了不可恢复**）。
 
    为什么要单独一层（而不是各页面各写一遍 fetch）：
    1. storage.js 是全项目唯一的数据出入口（它自己的文件头就是这么写的），
@@ -15,7 +18,8 @@
       （沿用 PRD E2「数据异常也不报错不白屏」的思路）。
 
    接口契约：api-contract.md 4.3（A2 /api/settings）、4.5（A4 /api/checkins）、
-   4.7（A6 PUT /api/checkins/{date}）。
+   4.7（A6 PUT /api/checkins/{date}）、4.9（A8 PATCH /api/checkins/{date}）、
+   4.10（A9 DELETE /api/checkins/{date}）。
    字段已经是 camelCase，与页面直接对接，不需要再转换。
 
    写入策略（Day 18 拍板，方案 A「云端优先 + 本地兜底」）：
@@ -89,6 +93,75 @@
   }
 
   /**
+   * A8 局部修改接口：只改请求体里出现的字段（契约 4.9）。
+   *
+   * 与 saveCheckin 的关键区别（这也是 PATCH 存在的理由）：
+   *   saveCheckin 会把整条记录的 11 个字段一起写一遍，没填的会变成空值，
+   *   所以「只想改个体重」得先把整条读出来、改一格、再整条发回去；
+   *   patchCheckin 只写你给的那几列，数据库里其他列原样不动。
+   *   请求体越小越不容易误伤，多端各改各的字段时也不会互相覆盖。
+   *
+   * @param {string} date   日期 YYYY-MM-DD（路径参数；请求体里不带，带了必须与路径一致）
+   * @param {Object} fields 要改的字段（camelCase），至少要有一个，如 { weightKg: 66 }
+   * @returns {Promise<{ok: true, record: Object} | {ok: false, message: string}>}
+   *   永远 resolve，调用方不需要写 catch（与 saveCheckin 同一约定）。
+   */
+  function patchCheckin(date, fields) {
+    // 契约 4.9：日期以路径为准；顺手把 date 剔掉，避免「路径与请求体不一致」的 400
+    var payload = {};
+    Object.keys(fields || {}).forEach(function (k) {
+      if (k !== 'date') payload[k] = fields[k];
+    });
+
+    return fetch(API_BASE + '/api/checkins/' + encodeURIComponent(date), {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    })
+      .then(function (res) {
+        return res.json().then(function (body) {
+          if (!res.ok || !body || body.ok !== true) {
+            var msg = (body && body.error && body.error.message) || ('修改失败（HTTP ' + res.status + '）');
+            return { ok: false, message: msg };
+          }
+          return { ok: true, record: body.data.record };
+        });
+      })
+      .catch(function (e) {
+        return { ok: false, message: (e && e.message) || '网络不通，这次没改成' };
+      });
+  }
+
+  /**
+   * A9 删除接口：删掉某一天的整条记录（契约 4.10）。
+   *
+   * **此操作不可恢复。** 接口这一层不替你确认——怎么问、问不问，都是调用方的事，
+   * 所以页面里调它之前必须先弹二次确认（检查台的删除按钮就是这么做的）。
+   * 成功时接口只回 { date, deleted: true }，不回被删掉的内容（删了就是删了）。
+   *
+   * @param {string} date 日期 YYYY-MM-DD（路径参数）
+   * @returns {Promise<{ok: true, date: string} | {ok: false, message: string}>}
+   *   永远 resolve，调用方不需要写 catch（与 saveCheckin 同一约定）。
+   */
+  function deleteCheckin(date) {
+    return fetch(API_BASE + '/api/checkins/' + encodeURIComponent(date), {
+      method: 'DELETE'
+    })
+      .then(function (res) {
+        return res.json().then(function (body) {
+          if (!res.ok || !body || body.ok !== true) {
+            var msg = (body && body.error && body.error.message) || ('删除失败（HTTP ' + res.status + '）');
+            return { ok: false, message: msg };
+          }
+          return { ok: true, date: body.data.date };
+        });
+      })
+      .catch(function (e) {
+        return { ok: false, message: (e && e.message) || '网络不通，这次没删掉' };
+      });
+  }
+
+  /**
    * 取云端数据（只取一次）。
    * @returns {Promise<{ok: boolean, count?: number, reason?: string}>}
    *   永远 resolve，不 reject —— 调用方不需要写 catch。
@@ -136,6 +209,8 @@
     load: load,
     ready: ready,
     saveCheckin: saveCheckin,
+    patchCheckin: patchCheckin,
+    deleteCheckin: deleteCheckin,
     getResult: function () { return result; }
   };
 })();

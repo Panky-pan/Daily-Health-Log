@@ -14,8 +14,10 @@ const { ERR } = require("./errors");
 // 我们若再写一个 "*"，网关会把两者拼成 "http://xxx,*"（带 credentials 时 Allow-Origin
 // 不允许是 "*"，更不允许逗号多值）→ 浏览器判定跨域失败，前端报 "Failed to fetch"。
 // 所以这里只保留方法/请求头两项，Allow-Origin 交给网关。
+// 注意（2026-10-07 更新）：PATCH / DELETE 接口上线后，方法列表加 PATCH, DELETE。
+//   不在白名单里就发不出真请求（预检会回 Allow-Methods，浏览器据此判断能不能发）。
 const CORS_HEADERS = {
-  "Access-Control-Allow-Methods": "GET, PUT, OPTIONS",
+  "Access-Control-Allow-Methods": "GET, PUT, PATCH, DELETE, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type",
 };
 

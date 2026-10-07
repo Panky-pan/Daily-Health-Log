@@ -1168,6 +1168,24 @@ body {
   color: var(--color-danger);
 }
 
+/* ---- 危险按钮（检查台的「删除测试」用）：红描边，不跟主按钮抢视线 ----
+   语义色分工里红＝错误 / 危险，删除是页面唯一不可恢复的操作，所以用红描边。
+   必须写在 .btn / .btn:hover / .btn:disabled 之后才能盖住它们（同为单类选择器，按源码顺序生效）。 */
+.btn-danger {
+  color: var(--color-danger);
+  background: transparent;
+  border: 1px solid var(--color-danger);
+}
+
+.btn-danger:hover {
+  color: #fff;
+  background: var(--color-danger);
+}
+
+.btn-danger:disabled:hover {
+  background: transparent;   /* 禁用态别再变红，明确"点了也没用" */
+}
+
 /* ---- 最后更新时间（余力加练，2026-10-06）：一行小结，不抢三张卡的视觉重心 ---- */
 .check-updated {
   margin: 0 0 16px;

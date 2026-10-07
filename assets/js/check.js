@@ -1,15 +1,22 @@
 /* ============================================
    check.js —— 检查台页（开发自测用，2026-10-06 新增）
    ------------------------------------------------------------
-   干什么：页面一打开就把三件事摊开给你看
-     ① 服务健康状态   GET  /api/health
-     ② 数据库真实记录 GET  /api/checkins（checkins 表，前 30 条）
-     ③ 写入测试       PUT  /api/checkins/{date}（固定样例内容）
+   干什么：页面一打开就把五件事摊开给你看
+     ① 服务健康状态   GET    /api/health
+     ② 数据库真实记录 GET    /api/checkins（checkins 表，前 30 条）
+     ③ 写入测试       PUT    /api/checkins/{date}（整条覆盖，固定样例内容）
+     ④ 局部修改测试   PATCH  /api/checkins/{date}（只改固定样例里的那几个字段）
+     ⑤ 删除测试       DELETE /api/checkins/{date}（不可恢复，所以有二次确认）
+
+   ④⑤ 是 2026-10-07 加的，和 ③ 刚好凑成一组对照：
+     ③ 证明「写得进去」；④ 证明「只动想动的那几列，其余原样保留」；
+     ⑤ 证明「删得掉；删不存在的会拿到中文提示而不是报错页」。
 
    为什么自己写 fetch 而不复用 api-source.js 的 load()：
      load() 做的事是「取数 → 塞进 storage 的云端覆盖层 → 让页面照旧从 dhlStorage 读」，
    那是给业务页用的。检查台要的是「原样把接口返回摊开」，不经过 storage 这一层，
-   反而更能看清接口本身返回了什么。写接口则直接复用 dhlApi.saveCheckin（同一套请求逻辑）。
+   反而更能看清接口本身返回了什么。三个写类接口则直接复用 dhlApi 里的现成方法
+   （saveCheckin / patchCheckin / deleteCheckin），页面不自己拼请求。
 
    这个页面只做「看」和「写测试」，不碰 localStorage，不改任何业务数据。
    ============================================ */
@@ -36,6 +43,23 @@
   };
 
   var TAG_ICON = { '健康': '🥗', '普通': '🍚', '放纵': '🍔' };
+
+  // ④ 局部修改（PATCH）用的固定样例：每条只带一两个字段，值都是契约 4.2 允许的合法值。
+  //    故意做了「只改一格」和「一次改两格」两类，好对照接口到底写了哪些列。
+  var PATCH_PRESETS = [
+    { key: 'weight', label: '只改体重 → 66 kg', fields: { weightKg: 66 } },
+    { key: 'water', label: '只改饮水 → 2000 ml', fields: { waterMl: 2000 } },
+    { key: 'lunch', label: '只改午餐文字 → 检查台 PATCH 测试', fields: { mealLunchText: '检查台 PATCH 测试' } },
+    { key: 'two', label: '一次改两项 → 体重 65.5 kg + 饮水 1800 ml', fields: { weightKg: 65.5, waterMl: 1800 } }
+  ];
+
+  // 字段的中文名 + 单位（只列 PATCH 样例会用到的几个，够把请求体说成人话）
+  var FIELD_LABEL = {
+    weightKg: { name: '体重', unit: ' kg' },
+    waterMl: { name: '饮水', unit: ' ml' },
+    exerciseMinutes: { name: '运动时长', unit: ' 分钟' },
+    mealLunchText: { name: '午餐文字', unit: '' }
+  };
 
   var $ = function (id) { return document.getElementById(id); };
 
@@ -70,6 +94,32 @@
     var icon = tag ? (TAG_ICON[tag] || '') : '';
     var label = tag ? (icon + ' ' + tag) : '';
     return escapeHtml([text, label].filter(Boolean).join(' · '));
+  }
+
+  /**
+   * 把一个 fields 对象说成人话，如「体重 66 kg、饮水 1800 ml」。
+   * @param {Object} fields 要描述的字段集合（决定说哪几项、按什么顺序说）
+   * @param {Object} source 从哪儿取值（改前传当天记录，改后传 fields 自己）
+   */
+  function describeFields(fields, source) {
+    return Object.keys(fields).map(function (k) {
+      var meta = FIELD_LABEL[k] || { name: k, unit: '' };
+      var v = source[k];
+      var shown = (v === '' || v === undefined || v === null) ? '空' : v + meta.unit;
+      return meta.name + ' ' + shown;
+    }).join('、');
+  }
+
+  /** 按当前选择的样例，取回它对应的预设对象。 */
+  function currentPreset() {
+    var key = $('patch-preset').value;
+    var hit = PATCH_PRESETS.filter(function (p) { return p.key === key; })[0];
+    return hit || PATCH_PRESETS[0];
+  }
+
+  /** 在 lastItems 里找某天的记录；没有就是 undefined（三张测试卡共用这个口径）。 */
+  function findRow(date) {
+    return lastItems.filter(function (it) { return it.date === date; })[0];
   }
 
   // ---------------------------------------------------------------------
@@ -149,6 +199,7 @@
         var items = data.items || [];
         lastItems = items;
         renderUpdated(items);   // 数据到手才算「最后更新」，所以放在这
+        refreshDateHints();     // 数据变了，「这天有没有记录」的提示也跟着重算
 
         if (!items.length) {
           // 空状态：最容易漏的一档，必须给一句话而不是空白
@@ -227,6 +278,144 @@
   }
 
   // ---------------------------------------------------------------------
+  // ④ 局部修改测试（PATCH，2026-10-07 新增）
+  // ---------------------------------------------------------------------
+  function renderPatchPreview() {
+    var preset = currentPreset();
+    var names = Object.keys(preset.fields);
+    $('patch-preview').textContent =
+      '将发送：PATCH /api/checkins/' + ($('patch-date').value || '（先选日期）') +
+      ' · 请求体 ' + JSON.stringify(preset.fields) +
+      ' · 只有这 ' + names.length + ' 个字段，其余列数据库里原样不动。';
+  }
+
+  function showPatchError(msg) {
+    $('patch-error').hidden = false;
+    $('patch-error').textContent = msg;
+    $('patch-status').hidden = true;
+  }
+
+  function doPatch() {
+    var date = $('patch-date').value;
+    if (!date) { showPatchError('先选一个日期再改。'); return; }
+
+    var preset = currentPreset();
+
+    // 本地先挡一道：那天没记录就不发请求了，直接把原因说清楚（省一次 404 往返）
+    var row = findRow(date);
+    if (!row) {
+      showPatchError(date + ' 这天还没有记录，改不了。PATCH 只改已有的记录——先去上面「写入测试」给这天写一条，或者换一天。');
+      return;
+    }
+
+    // 二次确认：把「改哪几项、从什么变成什么」都念出来，别让人糊里糊涂就改了
+    var ok = window.confirm(
+      '确认修改 ' + date + ' 的记录吗？\n\n' +
+      '改前：' + describeFields(preset.fields, row) + '\n' +
+      '改后：' + describeFields(preset.fields, preset.fields) + '\n\n' +
+      '只有这几列会被改动，这天记录的其他内容保持不变。'
+    );
+    if (!ok) return;
+
+    $('btn-patch').disabled = true;
+    $('btn-patch').textContent = '正在修改…';
+    $('patch-error').hidden = true;
+    $('patch-status').hidden = true;
+
+    // 复用 api-source.js 的 patchCheckin（成功失败都收敛成 {ok,...}，不会 reject）
+    window.dhlApi.patchCheckin(date, preset.fields)
+      .then(function (r) {
+        if (!r.ok) { showPatchError('没改成：' + r.message); return; }
+        $('patch-status').hidden = false;
+        $('patch-status').textContent =
+          '改好了：' + date + ' 的 ' + describeFields(preset.fields, preset.fields) +
+          '（这次只发了 ' + Object.keys(preset.fields).length + ' 个字段，其他列没动）。';
+        loadCheckins();   // 立刻回读，让表格自己证明改动真的落库了
+      })
+      .catch(function (e) {
+        showPatchError('没改成：' + ((e && e.message) || '未知错误'));
+      })
+      .then(function () {
+        $('btn-patch').disabled = false;
+        $('btn-patch').textContent = '局部修改测试';
+      });
+  }
+
+  // ---------------------------------------------------------------------
+  // ⑤ 删除测试（DELETE，2026-10-07 新增）
+  // ---------------------------------------------------------------------
+  function showDeleteError(msg) {
+    $('delete-error').hidden = false;
+    $('delete-error').textContent = msg;
+    $('delete-status').hidden = true;
+  }
+
+  function doDelete() {
+    var date = $('delete-date').value;
+    if (!date) { showDeleteError('先选一个日期再删。'); return; }
+
+    // 本地先挡一道：本来就没记录的日子不用发请求
+    var row = findRow(date);
+    if (!row) {
+      showDeleteError(date + ' 这天本来就没有记录，没什么可删的。换一天试试。');
+      return;
+    }
+
+    // 二次确认（AGENTS.md 第八条：页面上的删除操作必须二次确认）。
+    // 这里把即将被删掉的内容原样念出来，并明说不可恢复——不给「撤销」留幻想。
+    var ok = window.confirm(
+      '要删掉 ' + date + ' 的这条记录吗？\n\n' +
+      date + '：运动 ' + val(row.exerciseType) +
+      ' / 午餐 ' + val(row.mealLunchText) +
+      ' / 体重 ' + val(row.weightKg) +
+      ' / 饮水 ' + val(row.waterMl) + '\n\n' +
+      '删了就回不来了，页面上没有撤销，只能重新打卡再记一遍。'
+    );
+    if (!ok) return;
+
+    $('btn-delete').disabled = true;
+    $('btn-delete').textContent = '正在删除…';
+    $('delete-error').hidden = true;
+    $('delete-status').hidden = true;
+
+    // 复用 api-source.js 的 deleteCheckin（同样收敛成 {ok,...}
+    window.dhlApi.deleteCheckin(date)
+      .then(function (r) {
+        if (!r.ok) { showDeleteError('没删掉：' + r.message); return; }
+        $('delete-status').hidden = false;
+        $('delete-status').textContent = '删掉了：' + r.date + ' 这条记录已经不在库里了。';
+        loadCheckins();   // 立刻回读，表格里那一行应该消失
+      })
+      .catch(function (e) {
+        showDeleteError('没删掉：' + ((e && e.message) || '未知错误'));
+      })
+      .then(function () {
+        $('btn-delete').disabled = false;
+        $('btn-delete').textContent = '删除测试';
+      });
+  }
+
+  // ---------------------------------------------------------------------
+  // 三张卡共用的「这天有没有记录」提示
+  // ---------------------------------------------------------------------
+  // 数据刷新后（loadCheckins 成功）和用户换日期时都重算一次。
+  // 提示按每张卡的后果分别写，不写一句通用的废话。
+  function refreshDateHints() {
+    var w = $('write-date').value;
+    $('write-date-hint').textContent = findRow(w) ? '注意：这天已经有记录了，写入会覆盖它。' : '';
+
+    var p = $('patch-date').value;
+    $('patch-date-hint').textContent = findRow(p)
+      ? '这天有记录，可以改。'
+      : '这天没有记录——PATCH 只改已有的记录，点了会收到 404。';
+
+    var d = $('delete-date').value;
+    $('delete-date-hint').textContent = findRow(d)
+      ? '这天有记录，点了就会把这整条删掉。'
+      : '这天没有记录，没什么可删的。';
+  }
+
+  // ---------------------------------------------------------------------
   // 最后更新时间（余力加练，2026-10-06）
   // ---------------------------------------------------------------------
   // 一行显示两件事：这次检查发生在几点（本地时钟）、库里最新一条记录是哪天。
@@ -255,17 +444,34 @@
   $('write-date').value = today();
   $('write-date').max = today();     // 不给写未来日期，和打卡页一个口径
   renderPreview();
+
+  // ④⑤ 的日期默认也是今天，同样不给选未来（那天不可能有记录）
+  $('patch-date').value = today();
+  $('patch-date').max = today();
+  $('delete-date').value = today();
+  $('delete-date').max = today();
+
+  // ④ 的样例下拉由 JS 生成，PATCH_PRESETS 是唯一来源（以后加样例只改那一个数组）
+  $('patch-preset').innerHTML = PATCH_PRESETS.map(function (p) {
+    return '<option value="' + escapeHtml(p.key) + '">' + escapeHtml(p.label) + '</option>';
+  }).join('');
+  renderPatchPreview();
+
   loadHealth();
   loadCheckins();
 
   $('btn-health').addEventListener('click', loadHealth);
   $('btn-reload').addEventListener('click', loadCheckins);
   $('btn-write').addEventListener('click', doWrite);
-  $('write-date').addEventListener('change', function () {
-    var picked = this.value;
-    var hit = lastItems.filter(function (it) { return it.date === picked; })[0];
-    $('write-date-hint').textContent = hit
-      ? '注意：这天已经有记录了，写入会覆盖它。'
-      : '';
+  $('btn-patch').addEventListener('click', doPatch);
+  $('btn-delete').addEventListener('click', doDelete);
+
+  // 三张卡的日期提示统一走 refreshDateHints，不再各写一份判断
+  $('write-date').addEventListener('change', refreshDateHints);
+  $('delete-date').addEventListener('change', refreshDateHints);
+  $('patch-date').addEventListener('change', function () {
+    refreshDateHints();
+    renderPatchPreview();     // 预览行里带着日期，换日期要跟着变
   });
+  $('patch-preset').addEventListener('change', renderPatchPreview);
 })();

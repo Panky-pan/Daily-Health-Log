@@ -98,4 +98,46 @@ async function saveCheckin(values, date) {
   return { row: row || null, error: null };
 }
 
-module.exports = { findAll, findByDate, existsByDate, saveCheckin };
+// A8 局部修改（契约 4.9）：只 UPDATE 请求体里出现的列，没出现的字段保持原值。
+//   与 saveCheckin 的 upsert 完全不同 —— upsert 是「同一天没有就插、有就整条覆盖」，
+//   patch 是「那天必须有记录、只改这几个字段」。
+//
+// 不在 values 里放 user_id / date —— 它们是定位键，永远不动。
+// updated_at 显式刷新（与 saveCheckin 同款：用代码不用触发器，规则一眼能看见）。
+// created_at 不在 UPDATE 范围里，自然保持首次保存的时间。
+//
+// @param {Object} values 已校验过的字段（键即数据库列名，只包含要改的列）
+// @param {string} date   YYYY-MM-DD
+// @returns {Promise<{row: Object|null, error: *}>} row = 写库直接回传的那行，可能为 null
+async function patchCheckin(values, date) {
+  const { data, error } = await getDb()
+    .from(TABLE)
+    .update({ ...values, updated_at: new Date().toISOString() })
+    .eq("user_id", USER_ID)
+    .eq("date", date)
+    .select();
+  if (error) return { row: null, error };
+
+  const row = Array.isArray(data) ? data[0] : data;
+  return { row: row || null, error: null };
+}
+
+// A9 删除单日记录（契约 4.10）：DELETE FROM checkins WHERE user_id=0 AND date=...
+//   handler 已先查 existsByDate，到这一步一定是「有记录可删」，
+//   但 SDK 返回值仍可能为空（比如并发删了），交给 handler 判断。
+//
+// @returns {Promise<{row: Object|null, error: *}>} row = 被删的那行（带 select() 回传），可能为 null
+async function deleteByDate(date) {
+  const { data, error } = await getDb()
+    .from(TABLE)
+    .delete()
+    .eq("user_id", USER_ID)
+    .eq("date", date)
+    .select();
+  if (error) return { row: null, error };
+
+  const row = Array.isArray(data) ? data[0] : data;
+  return { row: row || null, error: null };
+}
+
+module.exports = { findAll, findByDate, existsByDate, saveCheckin, patchCheckin, deleteByDate };

@@ -10,7 +10,9 @@
 //     A3  PUT /api/settings          存 / 改目标设置（upsert；startDate 首次写入后永不覆盖）
 //     A4  GET /api/checkins          列表读取打卡记录（表 checkins，一天一条）
 //     A5  GET /api/checkins/{date}   读单日记录（那天没打卡回 200 + record:null）
-//     A6  PUT /api/checkins/{date}   保存 / 覆盖单日记录（打卡记录唯一的写入口）
+//     A6  PUT /api/checkins/{date}   保存 / 覆盖单日记录（PUT 全量覆盖，唯一的 upsert 写入口）
+//     A8  PATCH /api/checkins/{date} 局部修改单日记录（只改请求体里出现的字段，没出现的字段不动）
+//     A9  DELETE /api/checkins/{date} 删除单日记录（**此操作不可恢复**，前端必须二次确认）
 //
 //   未实现（契约登记待做）：
 //     A7  POST /api/checkins/import  批量导入（本地数据迁移专用，可延后）
@@ -35,7 +37,7 @@ const { ERR } = require("./lib/errors");
 const { ALLOWED_ORIGINS } = require("./lib/config");
 const { handleHealth } = require("./handlers/health");
 const { handleGetSettings, handlePutSettings } = require("./handlers/settings");
-const { handleListCheckins, handleGetCheckin, handlePutCheckin } = require("./handlers/checkins");
+const { handleListCheckins, handleGetCheckin, handlePutCheckin, handlePatchCheckin, handleDeleteCheckin } = require("./handlers/checkins");
 
 // ---------------------------------------------------------------------------
 // CORS 白名单（2026-10-06 方案 A）：读写接口一律校验来源
@@ -104,7 +106,7 @@ const server = http.createServer(async (req, res) => {
       return await handleListCheckins(res, url.searchParams);
     }
 
-    // A5 · GET /api/checkins/{date}（读单日）/ A6 · PUT（保存 / 覆盖单日）
+    // A5 · GET /api/checkins/{date}（读单日）/ A6 · PUT（保存 / 覆盖单日）/ A8 · PATCH（局部修改单日）/ A9 · DELETE（删除单日）
     if (path.startsWith("/api/checkins/")) {
       const rest = path.slice("/api/checkins/".length);
       // A7 批量导入（POST /api/checkins/import）登记待实现，先当路径不存在（契约 4.8）
@@ -112,6 +114,8 @@ const server = http.createServer(async (req, res) => {
       // 只写到 /api/checkins/、后面没跟日期：这不是任何已登记的路径（契约 2.3 的 404）
       if (rest === "") return sendFail(res, 404, ERR.NOT_FOUND, "没有这个接口");
       if (req.method === "GET") return await handleGetCheckin(res, rest);
+      if (req.method === "PATCH") return await handlePatchCheckin(res, rest, req);
+      if (req.method === "DELETE") return await handleDeleteCheckin(res, rest);
       // 路径对、方法不对（比如 POST 这个地址）→ 405（契约 2.3）
       if (req.method !== "PUT") return sendMethodNotAllowed(res, req.method);
       return await handlePutCheckin(res, rest, req);

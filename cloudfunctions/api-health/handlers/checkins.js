@@ -1,4 +1,4 @@
-// handlers/checkins.js —— A4 · GET /api/checkins、A6 · PUT /api/checkins/{date}
+// handlers/checkins.js —— A4 · GET /api/checkins、A6 · PUT /api/checkins/{date}、A8 · PATCH /api/checkins/{date}、A9 · DELETE /api/checkins/{date}
 //
 // 本层的职责边界：解析请求参数 → 校验 → 调 repository → 把结果包装成响应。
 // 这里不出现任何数据库查询语句（那是 repositories/ 的事），也不写字段校验规则（那是 validators/ 的事）。
@@ -9,7 +9,7 @@ const { MAX_RANGE_DAYS, MAX_LIMIT } = require("../lib/config");
 const { isDateStr, daysBetween } = require("../lib/dates");
 const { readJsonBody } = require("../lib/body");
 const { checkinToApi, dateOnly } = require("../lib/mappers");
-const { validateCheckin } = require("../validators/checkin.validator");
+const { validateCheckin, validateCheckinPatch } = require("../validators/checkin.validator");
 const checkinsRepo = require("../repositories/checkins.repository");
 
 // A4 · GET /api/checkins
@@ -133,4 +133,105 @@ async function handleGetCheckin(res, date) {
   return sendOk(res, { record: row ? checkinToApi(row) : null });
 }
 
-module.exports = { handleListCheckins, handleGetCheckin, handlePutCheckin };
+// A8 · PATCH /api/checkins/{date} —— 局部修改单日记录（契约 4.9）
+//
+// 与 A6 PUT 的核心区别：
+//   A6 是「PUT 全量覆盖」—— 11 个字段都写一遍，缺的写 NULL，是同一天的整条替换；
+//   PATCH 是「局部修改」—— 只 UPDATE 请求体里出现的列，没出现的不动。
+//   "至少要改一个字段"（PATCH）和"至少有一项内容"（A6）语义不同：
+//     A6 全空 = 啥也没记，回 400「先记一项再保存」；
+//     PATCH 收到空体或只有 date = 没说要改什么，回 400「至少要改一个字段」。
+//
+// 执行顺序「先校验、后写库」，与 A6 同款：
+//   ① 路径日期格式 → ② 请求体是不是 JSON 对象 → ③ 请求体里的 date 是否与路径一致
+//   → ④ 字段局部校验 → ⑤ 查存在 → ⑥ 写库 → ⑦ 回读
+//
+// 关于「不存在返 404」：PATCH 改的是「已有的记录」，那天没记录 = 目标资源不存在，
+//   与 A5「读不到那天记录返 record:null」的 200 不同 —— 读是查询、改是状态变更，
+//   改一个不存在的目标属于"目标不存在"，404 + 中文比 200 + 假成功更诚实。
+async function handlePatchCheckin(res, date, req) {
+  // ① 路径参数
+  if (!isDateStr(date)) {
+    return sendFail(res, 400, ERR.INVALID_PARAM, "地址里的日期格式不对，应该写成 2026-09-21 这样");
+  }
+
+  // ② 请求体（空体按 {} 处理，让第 ④ 步去说"什么都没要改"）
+  const body = await readJsonBody(req);
+  if (body.bad) {
+    return sendFail(res, 400, ERR.VALIDATION_ERROR, "请求体不是合法的 JSON，检查一下格式", "record");
+  }
+  const raw = body.value;
+  if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
+    return sendFail(res, 400, ERR.VALIDATION_ERROR, "请求体要是一个 JSON 对象，比如 {\"weightKg\": 66}", "record");
+  }
+
+  // ③ 日期以路径为准；请求体里若也带了 date，必须与路径一致（同 A6 的规矩）
+  if (!(raw.date === undefined || raw.date === null || raw.date === "")) {
+    if (dateOnly(raw.date) !== date) {
+      return sendFail(res, 400, ERR.VALIDATION_ERROR, "请求体里的日期和地址里的日期对不上", "date");
+    }
+  }
+
+  // ④ 局部校验：只校验出现的字段，至少要改一个（date 不算）
+  const checked = validateCheckinPatch(raw);
+  if (checked.error) {
+    return sendFail(res, 400, checked.error.code, checked.error.message, checked.error.field);
+  }
+
+  // ⑤ 查存在：那天没记录返 404，PATCH 改的是已有记录
+  const { exists, error: readError } = await checkinsRepo.existsByDate(date);
+  if (readError) return sendDbError(res, "PATCH /api/checkins 查重", readError);
+  if (!exists) {
+    return sendFail(res, 404, ERR.NOT_FOUND, `${date} 那天没有打卡记录，先去打卡页建一条再改`);
+  }
+
+  // ⑥ 写库（只改指定列，updated_at 显式刷新；created_at 不在 UPDATE 范围，自然保持）
+  const { row: patchedRow, error: writeError } = await checkinsRepo.patchCheckin(checked.values, date);
+  if (writeError) return sendDbError(res, "PATCH /api/checkins 写库", writeError, "记录没改上，稍后再试一次");
+
+  // ⑦ 拿"改之后的样子"作为响应：优先用写库直接回传的行，兜底补一次读
+  let saved = patchedRow;
+  if (!saved) {
+    const { row: afterRow, error: afterError } = await checkinsRepo.findByDate(date);
+    if (afterError) return sendDbError(res, "PATCH /api/checkins 回读", afterError, "记录改下了但没能读回来，刷新页面看看");
+    saved = afterRow;
+  }
+  if (!saved) {
+    return sendFail(res, 500, ERR.INTERNAL_ERROR, "记录没改上，稍后再试一次");
+  }
+
+  return sendOk(res, { patched: true, record: checkinToApi(saved) });
+}
+
+// A9 · DELETE /api/checkins/{date} —— 删除单日记录（契约 4.10）
+//
+// 与 A6/A8 的区别：DELETE 无请求体、无字段校验，只看路径日期 + 是否存在。
+//   那天没记录返 404 + 中文（同 PATCH 的理由：删一个不存在的目标 = 目标不存在）。
+//   成功返 {ok:true,data:{date,deleted:true}}，不回 record —— 删了就是删了，没必要再回那条记录。
+//
+// 关于「不可恢复」：DELETE 是真删，前端必须二次确认（AGENTS.md 第八条第 5 项：
+//   涉及数据删除的功能页面上必须做二次确认，代码注释里写明「此操作不可恢复」）。
+//   **此操作不可恢复** —— 删掉的那天记录 created_at/updated_at 一起没了，
+//   无法通过日志找回，只能用 A6 PUT 重新写一条（但 created_at 会变成新的时间）。
+async function handleDeleteCheckin(res, date) {
+  // ① 路径参数
+  if (!isDateStr(date)) {
+    return sendFail(res, 400, ERR.INVALID_PARAM, "地址里的日期格式不对，应该写成 2026-09-21 这样");
+  }
+
+  // ② 查存在：那天没记录返 404 + 中文（不返 200 + deleted:false，因为「目标不存在」更诚实）
+  const { exists, error: readError } = await checkinsRepo.existsByDate(date);
+  if (readError) return sendDbError(res, "DELETE /api/checkins 查重", readError);
+  if (!exists) {
+    return sendFail(res, 404, ERR.NOT_FOUND, `${date} 那天没有打卡记录，删不了`);
+  }
+
+  // ③ 删（**此操作不可恢复**，前端必须二次确认后才发请求）
+  const { error: deleteError } = await checkinsRepo.deleteByDate(date);
+  if (deleteError) return sendDbError(res, "DELETE /api/checkins 删除", deleteError, "记录没删掉，稍后再试一次");
+
+  // ④ 返响应：不回 record，只确认删了哪天
+  return sendOk(res, { date, deleted: true });
+}
+
+module.exports = { handleListCheckins, handleGetCheckin, handlePutCheckin, handlePatchCheckin, handleDeleteCheckin };

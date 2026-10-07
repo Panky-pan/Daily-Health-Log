@@ -1,12 +1,12 @@
 # API 契约 ·「每日健康打卡」(Daily-Health-Log)
 
-> 版本：v1.5　登记日期：2026-10-01　最近更新：2026-10-03
+> 版本：v1.8　登记日期：2026-10-01　最近更新：2026-10-07
 > 依据文档：PRD.md v1.2、TECH_DESIGN.md v1.4、第 2 周前端成品（welcome / index / checkin / history / trends 五页 + assets 全套 JS）
 > 读者：零基础开发者（Panky）本人，以及未来任何想接手这个项目的人
 >
-> **本文件的状态：读接口 + 写接口（A6 单日记录）已实现。**
+> **本文件的状态：读接口 + 写接口（A6 PUT 全量覆盖 / A8 PATCH 局部修改 / A9 DELETE 删除单日）已实现。**
 > 它是第 3 周建表、写接口的**唯一依据**；代码与本文档冲突时，以本文档为准；要改接口先改这里。
-> 进度（2026-10-06）：**A1 `GET /api/health`、A2 `GET /api/settings`、A3 `PUT /api/settings`、A4 `GET /api/checkins`、A5 `GET /api/checkins/{date}`、A6 `PUT /api/checkins/{date}` 已上线**（实现细节见 4.9）；两张表已建成（见 3.4）；**7 个接口里 6 个已实现**，只剩 A7 `POST /api/checkins/import`（迁移专用，可延后）。
+> 进度（2026-10-07）：**A1 `GET /api/health`、A2 `GET /api/settings`、A3 `PUT /api/settings`、A4 `GET /api/checkins`、A5 `GET /api/checkins/{date}`、A6 `PUT /api/checkins/{date}`、A8 `PATCH /api/checkins/{date}`、A9 `DELETE /api/checkins/{date}` 已上线**（实现细节见 4.11）；两张表已建成（见 3.4）；**9 个接口里 8 个已实现**，只剩 A7 `POST /api/checkins/import`（迁移专用，可延后）。
 
 ---
 
@@ -97,7 +97,7 @@
 
 > **一条顺序约束（2026-10-06 补记，踩过坑才写下）**：本期**前端网页与云函数用的是同一个 `anon` 身份**。所以**不能先收回 `anon` 的写权限**——一收，网页自己点保存就报 `permission denied`（Day 18 就是这么失败过一次：读接口正常、写接口 42501）。正确顺序是：**二期先让网页改用登录身份（`authenticated`），再把 `anon` 降级为只读**。谁想「先把权限收了再说」都会把自己锁在门外。
 >
-> **本期已知的敞口（不是 bug，是单人自用阶段的取舍）**：任何拿到站点/接口地址的人，不只能**读**到记录，还能**改**（`anon` 仍带 `INSERT / UPDATE`）。2026-10-06 真人跨设备测试当天即被确认——同伴打开链接看到的是本人的三餐与体重，并当场提出疑问。**因此链接不能公开发布**；正式解法是二期接入登录（属已排期的后续任务）。
+> **本期已知的敞口（不是 bug，是单人自用阶段的取舍）**：任何拿到站点/接口地址的人，不只能**读**到记录，还能**改**也能**删**（`anon` 自 2026-10-07 起 带 `INSERT / UPDATE / DELETE` 三项写权限）。2026-10-06 真人跨设备测试当天即被确认——同伴打开链接看到的是本人的三餐与体重，并当场提出疑问。**因此链接不能公开发布**；正式解法是二期接入登录（属已排期的后续任务）。
 
 ### 2.6 关于「空值」的约定（重要，防渲染出 "null kg"）
 
@@ -236,12 +236,18 @@ ALTER TABLE settings ADD CONSTRAINT settings_user_fk FOREIGN KEY (user_id) REFER
 | A3 | PUT | `/api/settings` | 存 / 改目标设置 | **已实现（2026-10-06）** |
 | A4 | GET | `/api/checkins` | **列表读取**：按日期区间取打卡记录（不传参＝取全部） | **已实现（2026-10-02）** |
 | A5 | GET | `/api/checkins/{date}` | 读单日记录 | **已实现（2026-10-06）** |
-| A6 | PUT | `/api/checkins/{date}` | 保存 / 覆盖单日记录（upsert） | **已实现（2026-10-03）** |
+| A6 | PUT | `/api/checkins/{date}` | 保存 / 覆盖单日记录（**PUT 全量覆盖**，唯一的 upsert 写入口） | **已实现（2026-10-03）** |
 | A7 | POST | `/api/checkins/import` | 批量导入（本地数据迁移专用） | 登记待实现，**可延后** |
+| A8 | PATCH | `/api/checkins/{date}` | **局部修改**单日记录（只改请求体里出现的字段，没出现的字段不动） | **已实现（2026-10-07）** |
+| A9 | DELETE | `/api/checkins/{date}` | 删除单日记录（**此操作不可恢复**，前端必须二次确认） | **已实现（2026-10-07）** |
 
-> A2 / A4 / A5 / A6 的实现方式、凭证与踩坑记录见 **4.9**。
+> A2 / A4 / A5 / A6 / A8 / A9 的实现方式、凭证与踩坑记录见 **4.11**。
 
-> A6 是**唯一的写入口**：新建和覆盖都走它（upsert），前端不用判断该发 POST 还是 PUT。
+> **关于"写入口"的三层分工**：
+> - **A6 PUT**：唯一的 **upsert** 写入口（新建 + 整条覆盖）。前端打卡页"保存今日记录"走这个。
+> - **A8 PATCH**：**局部修改**已存在的记录（只改请求体里出现的字段，其他字段保持）。前端"只改一个字段"的场景走这个；不存在的日期返 404（不能 PATCH 一条不存在的记录）。
+> - **A9 DELETE**：**删除**单日记录。**此操作不可恢复**，前端必须二次确认。不存在的日期返 404。
+>
 > 本契约**没有**"单条写入的 POST 接口"——POST 只出现在 A7（批量导入）。想用 POST 写单日记录的话，那是另一套设计，得先改契约。
 
 > A4 就是"列表读取接口"这个角色位（对应课程案例的 `GET /api/favorites`）：历史页的筛选列表、日历、趋势图全靠它一次取数。
@@ -331,7 +337,7 @@ ALTER TABLE settings ADD CONSTRAINT settings_user_fk FOREIGN KEY (user_id) REFER
 > 注意：这个接口**不做"新建 vs 更新"两种语义**，统一 upsert——单人场景只有一条设置，前端不用判断该调 POST 还是 PUT。
 
 > 状态：✅ 已实现（2026-10-06）。实现落点：新建 `validators/settings.validator.js`（两个目标值 + 可选 startDate）、`repositories/settings.repository.js` 加 `saveSettings`（upsert，冲突键 `user_id`）、`handlers/settings.js` 加 `handlePutSettings`，`index.js` 放开 PUT。
-> **依赖一条数据库权限**：`anon` 角色要有 `settings` 的 `INSERT, UPDATE` 与 `settings_id_seq` 序列 `USAGE`（与 4.9 结论 6 的两条 GRANT 同一批，2026-10-06 已执行）。
+> **依赖一条数据库权限**：`anon` 角色要有 `settings` 的 `INSERT, UPDATE` 与 `settings_id_seq` 序列 `USAGE`（与 4.11 结论 6 的两条 GRANT 同一批，2026-10-06 已执行）。
 > 验证（2026-10-06 实测）：`PUT {"goalExerciseMinutes":45,"goalWaterMl":2200}` → 200，`startDate` 仍是 `2026-09-21`；带 `startDate:"2026-01-01"` 试图覆盖 → 200，`startDate` **仍**是 `2026-09-21`（规则 2 生效）；`goalWaterMl:99999` → 400 `field:"goalWaterMl"`；`{}` → 400 `field:"goalExerciseMinutes"`；`POST` → 405。库内核对：`created_at` 保持首次时间不变、`updated_at` 随每次保存刷新。
 
 ---
@@ -385,7 +391,7 @@ ALTER TABLE settings ADD CONSTRAINT settings_user_fk FOREIGN KEY (user_id) REFER
 **错误返回**：400 `INVALID_PARAM`、500 `DB_ERROR` / `INTERNAL_ERROR`。
 
 > 状态：✅ 已实现（2026-10-02）。验证：浏览器依次打开 `<API_BASE>/api/checkins`（9 条）、`<API_BASE>/api/checkins?from=2026-09-27&to=2026-10-01`（3 条）、`<API_BASE>/api/checkins?from=2026-10-01&to=2026-09-01`（400）。
-> 实现细节（含一条契约没写但代码里做了的固定过滤 `.eq("user_id", 0)`）见 **4.9**。
+> 实现细节（含一条契约没写但代码里做了的固定过滤 `.eq("user_id", 0)`）见 **4.11**。
 
 > **前端对接点（2026-10-02 已接）**：实际改的**不是** `state.js`。第 2 周留的 `fetchList(producer)` 那套设计是对的（页面只管拿 `{items}`），但真正决定"数据从哪来"的是更底层的 `assets/js/storage.js`——它是全项目唯一的数据出入口。在它底下加一层「**云端覆盖层**」后，**所有页面自动读到真库数据**，页面脚本一行未改。
 > - 新增取数层 `assets/js/api-source.js`：并发调 A2 + A4，取到的数据交给 `storage.js` 的 `applyRemote()`；**取不到就回落本地数据、不白屏**。
@@ -474,7 +480,7 @@ ALTER TABLE settings ADD CONSTRAINT settings_user_fk FOREIGN KEY (user_id) REFER
 - 实现要点：`INSERT ... ON CONFLICT (user_id, date) DO UPDATE`，一条 SQL 完成覆盖保存（TECH_DESIGN 3.0 第 ④ 步）。本期 `user_id` 写固定值 `0`（见 3.4），冲突键 `(user_id, date)` 才能命中唯一约束；若写成 NULL，冲突不会发生，会插出重复记录。
 
 **错误返回**：400 `VALIDATION_ERROR`（带 `field`）、500 `DB_ERROR` / `INTERNAL_ERROR`。
-**不做**：不允许删除某天记录（PRD 无此功能），不提供 DELETE。
+**关于删除**：A6 本身不删记录（PUT 是 upsert，存什么是什么）；删除走 **A9 `DELETE /api/checkins/{date}`**（2026-10-07 新增，原 v1.5「不建删除接口」的拍板已推翻，见第六节）。
 
 **补充说明（2026-10-03 实现时落到代码里的细节）**：
 
@@ -484,8 +490,8 @@ ALTER TABLE settings ADD CONSTRAINT settings_user_fk FOREIGN KEY (user_id) REFER
 - **空请求体和非法 JSON 也计入校验失败**：空体按"什么都没填"处理（`field: "record"`），非法 JSON 回 400（也带 `field: "record"`）。
 - **`date` 格式非法回的是 `INVALID_PARAM` 而不是 `VALIDATION_ERROR`**：日期是**路径参数**，不是请求体字段，按 2.3 的码表归 `INVALID_PARAM`（不带 `field`）；请求体里的字段问题才用 `VALIDATION_ERROR`（带 `field`）。
 
-> 状态：✅ 已实现（2026-10-03）。验证：见 4.9「A6 线上验证清单」。
-> **依赖一条数据库权限**：云函数用的凭证对应 `anon` 角色，必须给它 `INSERT, UPDATE`（含 id 自增序列的 `USAGE`）才写得进去，详见 4.9 结论 6。
+> 状态：✅ 已实现（2026-10-03）。验证：见 4.11「A6 线上验证清单」。
+> **依赖一条数据库权限**：云函数用的凭证对应 `anon` 角色，必须给它 `INSERT, UPDATE`（含 id 自增序列的 `USAGE`）才写得进去，详见 4.11 结论 6。
 
 ---
 
@@ -510,9 +516,113 @@ ALTER TABLE settings ADD CONSTRAINT settings_user_fk FOREIGN KEY (user_id) REFER
 
 ---
 
-### 4.9 接口实现现状（2026-10-06 更新）
+### 4.9 A8 · PATCH /api/checkins/{date}
 
-> 本节记录「代码到底怎么写的」，供后来接手的人排查；**接口形状仍以 4.2~4.8 为准**。
+**用途**：局部修改一条已存在的打卡记录（只改请求体里出现的字段，没出现的字段保持原值）。与 A6 PUT 全量覆盖互补：A6 用于"重写整天"，A8 用于"只改一个或几个字段"。
+
+| 项 | 内容 |
+|---|---|
+| 路径参数 | `date`：`YYYY-MM-DD` |
+| 请求头 | `Content-Type: application/json` |
+| 请求体 | 一个 JSON 对象，**只带要改的字段**；`date` 不是可改字段（路径说了算），但允许出现在请求体里（必须与路径一致，否则 400） |
+
+请求体示例（只改体重和午餐标签）：
+
+```json
+{ "weightKg": 66.0, "mealLunchTag": "健康" }
+```
+
+**可改字段**（与 3.2 表的字段一一对应，`date` 除外）：
+
+| 字段 | 类型 | 校验 |
+|---|---|---|
+| `exerciseType` | string | 枚举：散步 / 慢跑 / 跳绳 / 骑行 / 力量训练 / 瑜伽 / `""` |
+| `exerciseMinutes` | number \| `""` | 0~600 整数 |
+| `exerciseCalories` | number \| `""` | 0~9999 整数（后端不重算） |
+| `mealBreakfastText` / `mealLunchText` / `mealDinnerText` | string | ≤100 字 |
+| `mealBreakfastTag` / `mealLunchTag` / `mealDinnerTag` | string | `健康` / `普通` / `放纵` / `""` |
+| `weightKg` | number \| `""` | 30~200，一位小数 |
+| `waterMl` | number \| `""` | 0~10000 整数 |
+
+**校验规则**（与 A6 的字段校验同一套，但只校验请求体里**出现**的字段；"至少要改一个字段"取代 A6 的"至少有一项内容"）：
+
+| 规则 | 不通过时 |
+|---|---|
+| 请求体里至少有一个可改字段（`date` 不算） | 400 `VALIDATION_ERROR`，`field: "record"`，message: "至少要改一个字段" |
+| 出现的字段值非法（如 `weightKg: 500`） | 400 `VALIDATION_ERROR`，`field` 是该字段名 |
+| 请求体里的 `date` 与路径不一致 | 400 `VALIDATION_ERROR`，`field: "date"` |
+| 路径 `date` 格式非法 | 400 `INVALID_PARAM`（无 `field`，与 A6 同款区分） |
+
+**成功响应**（200）：返回改之后的整条记录（与 A6 同款"回读"，前端可直接用它刷新界面）。
+
+```json
+{ "ok": true, "data": { "patched": true, "record": { "date": "2026-09-21", "...": "改之后的所有字段" } } }
+```
+
+**错误返回**：
+
+| 场景 | 返回 |
+|---|---|
+| 路径 `date` 格式错 | 400 `INVALID_PARAM`（无 `field`） |
+| 请求体不是合法 JSON / 不是对象 | 400 `VALIDATION_ERROR`，`field: "record"` |
+| 请求体里 `date` 与路径不一致 | 400 `VALIDATION_ERROR`，`field: "date"` |
+| 空请求体或只有 `date` | 400 `VALIDATION_ERROR`，`field: "record"`，message: "至少要改一个字段" |
+| 字段值非法 | 400 `VALIDATION_ERROR`，`field` 是该字段名 |
+| **那天没有打卡记录** | **404 `NOT_FOUND`** + 中文："`2026-10-08` 那天没有打卡记录，先去打卡页建一条再改" |
+| 数据库写入失败 | 500 `DB_ERROR` |
+
+> **为什么不存在的 date 返 404 而不是 200 + patched:false**：PATCH 改的是**已存在的记录**，那天没记录 = 目标资源不存在；与 A5 读的 200 + `record:null`（读是查询、那天没记是正常状态）语义不同——改删是状态变更，对一个不存在的目标做变更属于"目标不存在"，404 + 中文比 200 + 假成功更诚实。
+> **二次确认**：前端调用前应做二次确认（"确认把 2026-09-21 的体重改成 66.0 kg 吗？"）。改虽然不删数据，但属于"动数据"，按 AGENTS.md 第八条第 5 项精神仍确认一次更稳。
+
+> 状态：✅ 已实现（2026-10-07）。实现落点：新建 `validateCheckinPatch`（局部校验，只校验出现的字段，至少要改一个）；`repositories/checkins.repository.js` 加 `patchCheckin(values, date)`（SDK `.update().eq()` 风格，只改指定列 + `updated_at` 显式刷新）；`handlers/checkins.js` 加 `handlePatchCheckin`；`index.js` 路由放开 PATCH；`lib/response.js` 的 CORS Allow-Methods 加 `PATCH`。
+> **依赖的数据库权限**：`anon` 角色要有 `UPDATE`（A6 上线时已开，PATCH 走同一个权限，不另开）。
+> 验证（2026-10-07 待部署后跑）：见 4.11 的 PATCH 测试三条 curl。
+
+---
+
+### 4.10 A9 · DELETE /api/checkins/{date}
+
+**用途**：删除一条打卡记录。**此操作不可恢复**——删掉的那天记录 `created_at` / `updated_at` 一起没了，无法通过日志找回，只能用 A6 PUT 重新写一条（但 `created_at` 会变成新的时间）。
+
+| 项 | 内容 |
+|---|---|
+| 路径参数 | `date`：`YYYY-MM-DD` |
+| 请求头 | 无 |
+| 请求体 | 无 |
+
+**校验规则**：
+
+| 规则 | 不通过时 |
+|---|---|
+| 路径 `date` 格式合法 | 400 `INVALID_PARAM`（无 `field`） |
+| 那天有记录才能删 | **404 `NOT_FOUND`** + 中文："`2026-10-08` 那天没有打卡记录，删不了" |
+
+**成功响应**（200）：不回 `record`（删了就是删了，没必要再回那条记录），只确认删了哪天。
+
+```json
+{ "ok": true, "data": { "date": "2026-09-21", "deleted": true } }
+```
+
+**错误返回**：
+
+| 场景 | 返回 |
+|---|---|
+| 路径 `date` 格式错 | 400 `INVALID_PARAM` |
+| 那天没有记录 | 404 `NOT_FOUND` + 中文 |
+| 数据库删除失败 | 500 `DB_ERROR` |
+
+> **二次确认（强制）**：前端调用前**必须**二次确认（`window.confirm("要删掉 2026-10-03 的记录吗？这一删就回不来了。")`）。AGENTS.md 第八条第 5 项硬性要求："涉及数据删除的功能页面上必须做二次确认，代码注释里写明此操作不可恢复"。
+> **不返 record 的理由**：与 A6/A8 不同，DELETE 成功后那条记录已经不在库里了，回 record 没有意义且会让前端误以为记录还在；只回 `{date, deleted:true}` 让前端据此刷新列表。
+
+> 状态：✅ 已实现（2026-10-07）。实现落点：`repositories/checkins.repository.js` 加 `deleteByDate(date)`（SDK `.delete().eq().select()` 风格，返回被删的行）；`handlers/checkins.js` 加 `handleDeleteCheckin`（顺序：路径日期 → 查存在 → 删 → 返响应，注释里写明「此操作不可恢复」）；`index.js` 路由放开 DELETE；CORS Allow-Methods 加 `DELETE`。
+> **依赖的数据库权限**：`anon` 角色要有 `DELETE`（A6/A8 上线时没有，2026-10-07 单独 GRANT 一条：`GRANT DELETE ON public.checkins TO anon;`）。**不需要序列权限**——DELETE 不生成新 id，不动 `checkins_id_seq`，所以只有一条 GRANT（对照 A6 的两条 GRANT）。
+> 验证（2026-10-07 待部署后跑）：见 4.11 的 DELETE 测试三条 curl + SQL 前后对比。
+
+---
+
+### 4.11 接口实现现状（2026-10-07 更新）
+
+> 本节记录「代码到底怎么写的」，供后来接手的人排查；**接口形状仍以 4.2~4.10 为准**。
 
 **云函数**：`cloudfunctions/api-health/`（HTTP 型，Nodejs18.15）。单入口，按 `url.pathname` 分发：
 
@@ -522,14 +632,17 @@ ALTER TABLE settings ADD CONSTRAINT settings_user_fk FOREIGN KEY (user_id) REFER
 | `GET /api/settings` | 已上线（2026-10-02），A2 |
 | `PUT /api/settings` | 已上线（2026-10-06），A3 |
 | `GET /api/checkins` | 已上线（2026-10-02），A4 |
-| `PUT /api/checkins/{date}` | 已上线（2026-10-03），A6 |
 | `GET /api/checkins/{date}` | 已上线（2026-10-06），A5 |
-| 其余方法（如对 `/api/checkins/{date}` 或 `/api/settings` 发 POST / DELETE） | 405 `METHOD_NOT_ALLOWED` |
+| `PUT /api/checkins/{date}` | 已上线（2026-10-03），A6（upsert 全量覆盖） |
+| `PATCH /api/checkins/{date}` | 已上线（2026-10-07），A8（局部修改） |
+| `DELETE /api/checkins/{date}` | 已上线（2026-10-07），A9（删除单日） |
+| 其余方法（如对 `/api/checkins/{date}` 或 `/api/settings` 发 POST） | 405 `METHOD_NOT_ALLOWED` |
 | `/api/checkins/import`（A7）、`/api/checkins/`（后面没跟日期）与其它未登记路径 | 404 `NOT_FOUND` |
 
-> **两处状态变化（别被旧记录误导）**：
+> **三处状态变化（别被旧记录误导）**：
 > ①（2026-10-03）`GET /api/checkins/2026-09-21` 从 404 变成了 **405** —— A6 上线后这个**路径已经存在**了，只是当时 GET 不是它的合法方法；
-> ②（2026-10-06）同一个地址的 GET 变成 **200** —— A5 上线，这个地址现在两种方法都合法（GET 读单日 / PUT 写单日）。
+> ②（2026-10-06）同一个地址的 GET 变成 **200** —— A5 上线，这个地址现在两种方法都合法（GET 读单日 / PUT 写单日）；
+> ③（2026-10-07）同一个地址再加 PATCH / DELETE 两种方法合法 —— A8 / A9 上线，现在四种方法都合法（GET / PUT / PATCH / DELETE）。
 
 **网关路由**：域名下只保留一条 **`/api`**（前缀匹配 + `enablePathTransmission: true`，即完整路径透传给函数）。曾经的单条 `/api/health` 路由已删除——**路由是按路径一条条建的，不放开就会连函数都进不去**。
 
@@ -558,6 +671,11 @@ ALTER TABLE settings ADD CONSTRAINT settings_user_fk FOREIGN KEY (user_id) REFER
    对照事实：`authenticated` / `service_role` 两个角色建表时就带完整读写权限，缺的只是 `anon` 这一份；本期没有登录，云函数只能以 `anon` 身份连库。
    **代价与二期动作**：Publishable Key 属于「可公开」类密钥，开了写权限后，**拿到它就能绕过云函数直接写库**（不过本期接口本来就无鉴权，见 2.5，风险增量有限）。二期接登录时必须连本带利收回：启用 RLS + 把写入口改成 `authenticated`，`anon` 只留 `SELECT`。
    > 排查手法（记下来）：临时让 `sendDbError` 把原始错误塞进响应 message 里，就能在 curl 输出里直接看到 `code`/`message`，不用等日志。查完立刻改回去，别留在线上。
+7. **`PATCH` 不需要新权限、`DELETE` 要单独开（2026-10-07 踩到预防）**：A8 PATCH 走的是 SDK `.update()`，对应数据库 `UPDATE` 权限——A6 上线时已经 GRANT 过，所以 PATCH 接口代码写完直接能跑。**A9 DELETE 不一样**：SDK `.delete()` 对应数据库 `DELETE` 权限，`anon` 默认没有，必须单独 GRANT 一条：
+   ```sql
+   GRANT DELETE ON public.checkins TO anon;
+   ```
+   **关键区别**：A6 的两条 GRANT 里有一条是给 id 自增序列的 `USAGE`（INSERT 要取新 id 值）；**DELETE 不需要序列权限**——删记录不生成新 id，不动 `checkins_id_seq`，所以 DELETE 只有一条 GRANT，没有"序列那条"。
 7. **`settings.start_date` 是 NOT NULL 且没有默认值，所以 upsert 时必须每次都带上它**（2026-10-06 做 A3 时踩到，第一次调用直接 500 `DB_ERROR`）：
    一开始照 A6 的思路想「不把它放进列清单 = 覆盖时不动它」，**这是错的**——PG 的 `INSERT ... ON CONFLICT DO UPDATE` 是先构造 INSERT tuple、再判冲突，`NOT NULL` 检查发生在冲突判定**之前**，所以"不出现"不是"不改"，而是"插不进去"。
    （A6 的 `saveCheckin` 没踩到：checkins 的 `NOT NULL` 列 `user_id` / `date` 本来就在 values 里，其余业务列都可空、`created_at` 靠 DEFAULT。）
@@ -594,6 +712,60 @@ curl -s -X PUT "$B/api/checkins/2026-10-03" -H 'Content-Type: application/json' 
 #    SELECT date, exercise_type, weight_kg, water_ml, created_at, updated_at
 #      FROM checkins WHERE date = DATE '2026-10-03';
 #    → 只有 1 行；created_at ≠ updated_at（第一次 INSERT、第二次 UPDATE 覆盖，created_at 没被改写）
+```
+
+**A8 PATCH 线上验证清单（2026-10-07 待部署后实测）**：
+
+```bash
+B="https://daily-health-log-d3eej7197499a30-1499041418.ap-shanghai.app.tcloudbase.com"
+
+# ① 正常：只改体重，其他字段保持原值（响应里 record 是改之后的整条）
+curl -s -X PATCH "$B/api/checkins/2026-09-21" -H 'Content-Type: application/json' -d '{"weightKg":66.0}'
+# → {"ok":true,"data":{"patched":true,"record":{"date":"2026-09-21","weightKg":66,"...":其他字段保持原值"}}}
+
+# ② 不存在的 date（404 + 中文）
+curl -s -X PATCH "$B/api/checkins/2026-10-08" -H 'Content-Type: application/json' -d '{"waterMl":1500}'
+# → {"ok":false,"error":{"code":"NOT_FOUND","message":"2026-10-08 那天没有打卡记录，先去打卡页建一条再改"}}
+
+# ③ 空请求体（400 VALIDATION_ERROR，field:record "至少要改一个字段"）
+curl -s -X PATCH "$B/api/checkins/2026-09-21" -H 'Content-Type: application/json' -d '{}'
+# → {"ok":false,"error":{"code":"VALIDATION_ERROR","message":"至少要改一个字段","field":"record"}}
+
+# ④ 数据库侧核对：PATCH 只改指定列，其他字段值应保持原样（与 A6 全量覆盖对比）
+#    SELECT exercise_type, weight_kg, water_ml, updated_at FROM checkins WHERE date = DATE '2026-09-21';
+#    → exercise_type 和 water_ml 与 PATCH 前一致，weight_kg = 66，updated_at 刷新；created_at 不变
+```
+
+**A9 DELETE 线上验证清单（2026-10-07 待部署后实测，含 SQL 前后对比）**：
+
+```bash
+B="https://daily-health-log-d3eej7197499a30-1499041418.ap-shanghai.app.tcloudbase.com"
+
+# 准备：先 SELECT 总数 + 那条记录的值（控制台 SQL 编辑器）
+#    SELECT count(*) AS total FROM checkins;
+#    SELECT date, exercise_type, weight_kg, water_ml FROM checkins WHERE date = DATE '2026-09-21';
+#    → total = N，那条记录的字段值
+
+# ① 正常：删一条存在的记录（响应不回 record）
+curl -s -X DELETE "$B/api/checkins/2026-09-21" -w "\n[HTTP %{http_code}]\n"
+# → {"ok":true,"data":{"date":"2026-09-21","deleted":true}}
+# → HTTP 200
+
+# ② 删后再查：总数 -1，那条记录消失
+#    SELECT count(*) AS total FROM checkins;
+#    → total = N - 1
+#    SELECT date FROM checkins WHERE date = DATE '2026-09-21';
+#    → 0 行（记录已删，无法找回）
+
+# ③ 删一条不存在的（404 + 中文）
+curl -s -X DELETE "$B/api/checkins/2026-10-08" -w "\n[HTTP %{http_code}]\n"
+# → {"ok":false,"error":{"code":"NOT_FOUND","message":"2026-10-08 那天没有打卡记录，删不了"}}
+# → HTTP 404
+
+# ④ 日期格式错（400 INVALID_PARAM，无 field）
+curl -s -X DELETE "$B/api/checkins/20261008" -w "\n[HTTP %{http_code}]\n"
+# → {"ok":false,"error":{"code":"INVALID_PARAM","message":"地址里的日期格式不对，应该写成 2026-09-21 这样"}}
+# → HTTP 400
 ```
 
 **线上验证清单**：
@@ -648,7 +820,7 @@ curl -s -X PUT "$B/api/checkins/2026-10-03" -H 'Content-Type: application/json' 
 |---|---|
 | 统计类接口（`/api/stats`、streak / 坚持率 / 周汇总 / 健康分） | 已有前端 `stats.js` 现成算法，原样复用；单人数据量在前端算毫无压力（TECH_DESIGN 3.3 的取舍结论） |
 | 按饮食标签筛选的接口 | 前端本地扫描即可（见 4.5 说明） |
-| 删除记录接口（DELETE） | PRD 无此功能。要清数据是用户手动清浏览器存储的事，接口不开口子 |
+| ~~删除记录接口（DELETE）~~ | ~~PRD 无此功能。要清数据是用户手动清浏览器存储的事，接口不开口子~~ **2026-10-07 推翻**：A9 `DELETE /api/checkins/{date}` 已实现（见 4.10），用于删除单日记录；前端强制二次确认，`anon` 角色单独 GRANT DELETE |
 | 账号 / 登录接口（`/api/auth/*`） | 属二期（PRD 2.2），启动条件是"MVP 上线且连续使用满 1 个月"；本契约只登记本期要用的，不等同于二期蓝图（二期接口另见 TECH_DESIGN 3.3 B2/B3） |
 | 图片上传（饮食拍照） | PRD 明确"本期不做" |
 | 健康小建议接口 | 第 2 周讨论过的规则引擎，属**前端规则**（纯函数），不建接口 |
@@ -661,12 +833,12 @@ curl -s -X PUT "$B/api/checkins/2026-10-03" -H 'Content-Type: application/json' 
 | # | 事项 | 依据 | 备注 |
 |---|---|---|---|
 | 1 | 在 PostgreSQL 里建 `checkins` / `settings` 两张表 | `db/schema.sql` | **已完成（2026-10-01）**：脚本与示例数据已生成，执行步骤、验证 SELECT、报错对照见 `db/README.md` |
-| 2 | 写 A2/A3/A4/A5/A6 五个接口（A7 可延后） | 本文档第四节 | **✅ 五个全部完成（2026-10-06）**：A2 / A3 / A4 / A5 / A6 均已上线（见 4.9）。A3 的权限前置（`settings` 表的 INSERT/UPDATE + `settings_id_seq` USAGE）也已于当日执行 |
+| 2 | 写 A2/A3/A4/A5/A6 五个接口（A7 可延后） | 本文档第四节 | **✅ 五个全部完成（2026-10-06）**：A2 / A3 / A4 / A5 / A6 均已上线（见 4.11）。A3 的权限前置（`settings` 表的 INSERT/UPDATE + `settings_id_seq` USAGE）也已于当日执行；**A8 PATCH / A9 DELETE 2026-10-07 新增，见 4.9 / 4.10** |
 | 3 | 把 `api-health` 的错误分支形状统一成 `{ok:false,error:{code,message}}` | 本文档 2.2 | **已完成（2026-10-02）**：404 / 405 / 400 / 500 全部统一；A1 的成功响应形状按 2.2 的例外保持不变。**2026-10-03 补充**：A6 上线带回 400 `VALIDATION_ERROR`（带 `field`），也走同一形状 |
 | 4 | 前端接接口：页面读真库数据 | 本文档 4.5 末注 | **读已完成（2026-10-02）**：改的是 `storage.js`（加云端覆盖层）+ 新增 `api-source.js`，四个页面各改一行启动方式；`state.js` / `history.js` / `stats.js` 未动。**写仍未接**：A6 已上线，但打卡页还是先写本地（`storage.js`），前端接 A6 是下一步待办 |
-| 5 | 处理 CORS（浏览器首次发请求时） | 本文档 2.7 | **已具备（2026-10-02，2026-10-03 补 PUT）**：云函数只回 `Allow-Methods`（含 `PUT`）/ `Allow-Headers`，`Allow-Origin` 交给网关；OPTIONS 预检回 204。实测见 4.9 |
+| 5 | 处理 CORS（浏览器首次发请求时） | 本文档 2.7 | **已具备（2026-10-02，2026-10-03 补 PUT，2026-10-07 补 PATCH / DELETE）**：云函数只回 `Allow-Methods`（含 `PUT / PATCH / DELETE`）/ `Allow-Headers`，`Allow-Origin` 交给网关；OPTIONS 预检回 204。实测见 4.11 |
 | 6 | 本地数据迁移：导出 → A7 导入 → 人工核对 | TECH_DESIGN 3.7 | 程序**永不**自动清本地数据 |
-| 7 | 给 `anon` 角色开 `checkins` 写权限（含 id 序列 `USAGE`） | 本文档 4.9 结论 6 | **已完成（2026-10-03）**：两条 GRANT 已在环境里执行；**二期接登录时必须收回**（`anon` 只留 `SELECT`，写入口改 `authenticated` + RLS） |
+| 7 | 给 `anon` 角色开 `checkins` 写权限（含 id 序列 `USAGE`） | 本文档 4.11 结论 6 | **已完成（2026-10-03）**：两条 GRANT（INSERT/UPDATE + 序列 USAGE）已在环境里执行；**2026-10-07 补一条 DELETE 权限**（PATCH 不需新权限，走 UPDATE）；**二期接登录时必须收回**（`anon` 只留 `SELECT`，写入口改 `authenticated` + RLS） |
 
 ---
 
@@ -682,6 +854,7 @@ curl -s -X PUT "$B/api/checkins/2026-10-03" -H 'Content-Type: application/json' 
 | v1.7 | 2026-10-06 | **A3 `PUT /api/settings` 实现并上线，7 个接口里 6 个已实现**：新建 `validators/settings.validator.js`；`repositories/settings.repository.js` 加 `saveSettings`（upsert，冲突键 `user_id`）；`handlers/settings.js` 加 `handlePutSettings`；`lib/dates.js` 加 `todayStr()`（按 GMT+8 取"服务器当天"，避免 UTC 错位）；`index.js` 放开 PUT。4.4 补状态与验证清单；4.1 / 4.9 / 第七节状态更新；**4.9 新增第 7 条踩坑：`settings.start_date` NOT NULL 无默认值，upsert 时必须每次都带上，"不覆盖"靠 handler 回填原值实现，不能靠"列清单里不放它"**；权限前置两条 GRANT（settings 表 + settings_id_seq）当日执行 |
 | v1.6 | 2026-10-06 | **A5 `GET /api/checkins/{date}` 实现并上线**：`handlers/checkins.js` 加 `handleGetCheckin`（复用 A6 回读用的 `findByDate`，未新增查询代码）+ `index.js` 路由放开 GET；4.6 补状态、实现落点与三条验证；4.1 总表状态更新；4.9 补路由表、状态变化②（该地址 GET 由 405 变 200）、验证清单三条；第五节去掉「或从 A4 里挑当天」的备选说法；第七节第 2 项剩 A3 并登记其权限前置条件 |
 | v1.5 | 2026-10-03 | **A6 `PUT /api/checkins/{date}` 实现并上线（本契约唯一的写入口）**：4.7 补实现细节（字段全量提交＝整条覆盖、`date` 可不带但要与路径一致、卡路里不算"内容"、空体与非法 JSON 的处理、路径日期错走 `INVALID_PARAM`）与状态；4.1 总表状态更新并**明确"本契约没有单条写入的 POST"**；4.9 路由表补 A6、补**第 6 条踩坑（`anon` 角色默认只有 SELECT，写库要 GRANT INSERT/UPDATE + 序列 USAGE）**、补 A6 三条 curl 测试命令与 SQL 核对方法；**验证清单里 `GET /api/checkins/{date}` 的预期由 404 改为 405**（路径因 A6 而存在）；第七节第 2 / 4 / 5 项更新、**新增第 7 项（anon 写权限，含二期收回动作）** |
+| v1.8 | 2026-10-07 | **A8 `PATCH /api/checkins/{date}` + A9 `DELETE /api/checkins/{date}` 实现并上线，9 个接口里 8 个已实现**。本版本**推翻 v1.5「不建删除接口」的拍板**（见第六节划掉的"删除记录接口"那行 + 注明推翻）。主要改动：① 头部状态行 + 4.1 总表加 A8/A9 两行 + 改"A6 是唯一写入口"为"A6 是唯一 upsert 写入口、A8 局部修改、A9 删除"三层分工；② 新增 4.9 节（A8 PATCH 详细说明：可改字段、校验规则、不存在的 date 返 404+中文）和 4.10 节（A9 DELETE 详细说明：强制二次确认、不可恢复、不回 record）；③ 原 4.9「接口实现现状」改名为 **4.11**，所有当前节引用从「见 4.9」改为「见 4.11」（变更记录里的历史叙述保留原编号不动，诚实原则）；④ 4.11 路由表加 PATCH/DELETE 行、补状态变化③（同一地址 4 种方法都合法）、**新增第 7 条踩坑结论：PATCH 不需新权限走 UPDATE、DELETE 要单独 GRANT 一条且不需要序列权限**、补 A8/A9 各四条 curl 验证清单（含 SQL 前后对比）；⑤ 2.5 敞口说明从"还能改"补成"还能改也能删"；⑥ 4.7 A6 的"不做：不提供 DELETE"改成指向 A9；⑦ 第七节第 7 项补 DELETE；⑧ 附表加 PATCH/DELETE 映射。**权限前置**：`GRANT DELETE ON public.checkins TO anon;`（2026-10-07 控制台执行，验证 `has_table_privilege` 三连返 t） |
 
 ---
 
@@ -689,7 +862,9 @@ curl -s -X PUT "$B/api/checkins/2026-10-03" -H 'Content-Type: application/json' 
 
 | 课程案例 | 本项目 | 说明 |
 |---|---|---|
-| `checkins` 表读写 | A4 / A5 / A6（表名同为 `checkins`） | 打卡记录 |
+| `checkins` 表读写 | A4 / A5 / A6 / A8 / A9（表名同为 `checkins`） | 打卡记录（A4 列表读 / A5 单日读 / A6 全量写 / A8 局部改 / A9 删） |
 | `plan_days` 表读写 | A2 / A3（表名 `settings`） | "计划/目标"角色 |
 | `GET /api/favorites`（列表读取） | **A4 `GET /api/checkins`** | 角色位相同：一次取列表供页面渲染 |
 | `/api/health` | A1（已上线） | 健康检查 |
+| 课程模板的 PATCH 局部修改 | **A8 `PATCH /api/checkins/{date}`**（已上线） | 局部改：只发改的字段，不动其他 |
+| 课程模板的 DELETE 删除 | **A9 `DELETE /api/checkins/{date}`**（已上线） | 删除单日记录，前端强制二次确认 |

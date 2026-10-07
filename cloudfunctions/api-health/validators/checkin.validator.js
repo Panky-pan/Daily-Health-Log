@@ -119,4 +119,98 @@ function validateCheckin(raw) {
   return { values };
 }
 
-module.exports = { validateCheckin, EXERCISE_TYPES, MEAL_TAGS };
+// PATCH 局部校验：只校验请求体里出现的字段（契约 4.9 A8）。
+//
+// 与 validateCheckin 的区别：
+//   A6 要求 11 个字段都在请求体里（缺的按 null 写库）；
+//   PATCH 只改请求体里出现的字段，没出现的不动。
+//   "至少要改一个字段"和 A6 的"至少有一项内容"语义不同 —— A6 全空 = 啥也没记，
+//   PATCH 收到空体或只有 date = 没说要改什么。
+//
+// 入参：raw 是请求体对象（已由 handler 确认是 JSON 对象）
+// 出参：{ values } 或 { error: { code, field, message } }
+//   values 的键是数据库列名，只包含 raw 里出现的字段（date 不在 values 里 —— date 是路径参数）。
+function validateCheckinPatch(raw) {
+  const values = {};
+  let hasPatch = false;  // 至少改了一个可改字段（date 不算）
+
+  // date 不在可改字段里 —— 路径参数说了算。允许出现在请求体里，
+  // 与路径一致性校验由 handler 做（同 A6），这里只跳过。
+
+  // 运动：三个字段互相独立，出现哪个校验哪个
+  if (raw.exerciseType !== undefined) {
+    const type = parseText(raw.exerciseType);
+    if (type.bad) return fieldError("exerciseType", "运动类型要写成文字");
+    if (type.value !== "" && !EXERCISE_TYPES.includes(type.value)) {
+      return fieldError("exerciseType", `运动类型只能是：${EXERCISE_TYPES.join(" / ")}`);
+    }
+    values.exercise_type = blankToNull(type.value);
+    hasPatch = true;
+  }
+
+  if (raw.exerciseMinutes !== undefined) {
+    const minutes = parseNum(raw.exerciseMinutes);
+    if (Number.isNaN(minutes) || (minutes !== null && (!Number.isInteger(minutes) || minutes < 0 || minutes > 600))) {
+      return fieldError("exerciseMinutes", "时长要填 0~600 的整数分钟");
+    }
+    values.exercise_minutes = minutes;
+    hasPatch = true;
+  }
+
+  if (raw.exerciseCalories !== undefined) {
+    const calories = parseNum(raw.exerciseCalories);
+    if (Number.isNaN(calories) || (calories !== null && (!Number.isInteger(calories) || calories < 0 || calories > 9999))) {
+      return fieldError("exerciseCalories", "卡路里要填 0~9999 的整数");
+    }
+    values.exercise_calories = calories;
+    hasPatch = true;
+  }
+
+  if (raw.weightKg !== undefined) {
+    const weight = parseNum(raw.weightKg);
+    if (Number.isNaN(weight)) return fieldError("weightKg", "体重要填 30~200 kg 之间的数");
+    if (weight !== null) {
+      if (weight < 30 || weight > 200) return fieldError("weightKg", "体重要填 30~200 kg 之间的数");
+      if (Math.round(weight * 10) !== weight * 10) return fieldError("weightKg", "体重最多填一位小数");
+    }
+    values.weight_kg = weight;
+    hasPatch = true;
+  }
+
+  if (raw.waterMl !== undefined) {
+    const water = parseNum(raw.waterMl);
+    if (Number.isNaN(water) || (water !== null && (!Number.isInteger(water) || water < 0 || water > 10000))) {
+      return fieldError("waterMl", "饮水量要填 0~10000 的整数 ml");
+    }
+    values.water_ml = water;
+    hasPatch = true;
+  }
+
+  // 三餐：text 和 tag 各自独立，出现哪个改哪个
+  for (const meal of MEALS) {
+    if (raw[meal.textKey] !== undefined) {
+      const text = parseText(raw[meal.textKey]);
+      if (text.bad) return fieldError(meal.textKey, `${meal.label}吃了什么要写成文字`);
+      if (text.value.length > 100) return fieldError(meal.textKey, "一句话就好，100 字以内");
+      values[meal.textCol] = blankToNull(text.value);
+      hasPatch = true;
+    }
+    if (raw[meal.tagKey] !== undefined) {
+      const tag = parseText(raw[meal.tagKey]);
+      if (tag.bad) return fieldError(meal.tagKey, `${meal.label}标签要写成文字`);
+      if (tag.value !== "" && !MEAL_TAGS.includes(tag.value)) {
+        return fieldError(meal.tagKey, `${meal.label}标签只能是：健康 / 普通 / 放纵`);
+      }
+      values[meal.tagCol] = blankToNull(tag.value);
+      hasPatch = true;
+    }
+  }
+
+  if (!hasPatch) {
+    return fieldError("record", "至少要改一个字段");
+  }
+
+  return { values };
+}
+
+module.exports = { validateCheckin, validateCheckinPatch, EXERCISE_TYPES, MEAL_TAGS };

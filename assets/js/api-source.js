@@ -8,7 +8,8 @@
       （A6 PUT /api/checkins/{date}，upsert 全量覆盖）；
    3. 改 / 删（2026-10-07 新增，目前只有检查台 check.html 在用）：
       patchCheckin()  只改指定的那几个字段（A8 PATCH），其余列原样保留；
-      deleteCheckin() 删掉某天的整条记录（A9 DELETE，**删了不可恢复**）。
+      deleteCheckin() 删掉某天的整条记录（A9 DELETE，**软删除**：数据留在库里，
+                      接口层面可用 A10 POST /{date}/restore 恢复；但页面没有恢复入口）。
 
    为什么要单独一层（而不是各页面各写一遍 fetch）：
    1. storage.js 是全项目唯一的数据出入口（它自己的文件头就是这么写的），
@@ -19,7 +20,7 @@
 
    接口契约：api-contract.md 4.3（A2 /api/settings）、4.5（A4 /api/checkins）、
    4.7（A6 PUT /api/checkins/{date}）、4.9（A8 PATCH /api/checkins/{date}）、
-   4.10（A9 DELETE /api/checkins/{date}）。
+   4.10（A9 DELETE /api/checkins/{date}；软删除，A10 POST /{date}/restore 可恢复）。
    字段已经是 camelCase，与页面直接对接，不需要再转换。
 
    写入策略（Day 18 拍板，方案 A「云端优先 + 本地兜底」）：
@@ -35,6 +36,24 @@
 
   var loading = null;  // 复用的 Promise：多个页面脚本同时 ready() 也只发一次请求
   var result = null;   // 最近一次取数的结果，供页面/控制台查看
+
+  /**
+   * 把「技术错误」收敛成人话（Day 23 三类错误统一）。
+   *
+   * 为什么需要它：浏览器原生网络错误（断网时 fetch reject 的 "Failed to fetch"、
+   * 网关回 HTML 时 res.json() 抛的 "Unexpected token <"）都是英文技术话术，
+   * 直接给用户看等于没提示（他看不懂，也不知道该干嘛）。
+   * 规矩：**只有我们自己写的中文提示才原样透传**（比如接口 400/500 带回来的
+   * error.message），其余一律换成给定的人话兜底。
+   *
+   * @param {*} e 捕获到的错误（可能为空）
+   * @param {string} fallback 人话兜底（中文）
+   */
+  function humanMessage(e, fallback) {
+    var msg = (e && e.message) || '';
+    if (/[\u4e00-\u9fa5]/.test(msg)) return msg;
+    return fallback;
+  }
 
   /**
    * 取一个接口并剥掉 {ok,data} 外壳。
@@ -87,8 +106,9 @@
         });
       })
       .catch(function (e) {
-        // 网络不通 / 响应不是 JSON —— 都当成"这次没存上"，由页面决定怎么提示
-        return { ok: false, message: (e && e.message) || '网络不通，这次没存上' };
+        // 网络不通 / 响应不是 JSON —— 都当成"这次没存上"，由页面决定怎么提示。
+        // 用 humanMessage：浏览器原生的英文错误（Failed to fetch 等）不能给用户看。
+        return { ok: false, message: humanMessage(e, '网络不通，这次没存上') };
       });
   }
 
@@ -128,16 +148,17 @@
         });
       })
       .catch(function (e) {
-        return { ok: false, message: (e && e.message) || '网络不通，这次没改成' };
+        return { ok: false, message: humanMessage(e, '网络不通，这次没改成') };
       });
   }
 
   /**
    * A9 删除接口：删掉某一天的整条记录（契约 4.10）。
    *
-   * **此操作不可恢复。** 接口这一层不替你确认——怎么问、问不问，都是调用方的事，
-   * 所以页面里调它之前必须先弹二次确认（检查台的删除按钮就是这么做的）。
-   * 成功时接口只回 { date, deleted: true }，不回被删掉的内容（删了就是删了）。
+   * 接口层是**软删除**（2026-10-07 起，契约 4.11）：数据留在库里，可用 A10 恢复。
+   * 但**页面没有恢复入口**，所以对用户而言仍是「删了就没了」——调用方调它之前
+   * 必须先弹二次确认（检查台的删除按钮就是这么做的）。
+   * 成功时接口只回 { date, deleted: true }，不回被删掉的内容（删了就当它没了）。
    *
    * @param {string} date 日期 YYYY-MM-DD（路径参数）
    * @returns {Promise<{ok: true, date: string} | {ok: false, message: string}>}
@@ -157,7 +178,7 @@
         });
       })
       .catch(function (e) {
-        return { ok: false, message: (e && e.message) || '网络不通，这次没删掉' };
+        return { ok: false, message: humanMessage(e, '网络不通，这次没删掉') };
       });
   }
 
@@ -188,8 +209,9 @@
         return result;
       })
       .catch(function (e) {
+        // 控制台里留原始英文错误（开发排查用），给页面/日志的 reason 换成人话
         console.warn('[api-source] 云端数据取不到，本次用本地数据渲染：', e && e.message);
-        result = { ok: false, reason: (e && e.message) || 'unknown' };
+        result = { ok: false, reason: humanMessage(e, '网络不通，这次没取到云端数据') };
         return result;
       });
 

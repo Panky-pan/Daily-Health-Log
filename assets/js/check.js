@@ -6,7 +6,8 @@
      ② 数据库真实记录 GET    /api/checkins（checkins 表，前 30 条）
      ③ 写入测试       PUT    /api/checkins/{date}（整条覆盖，固定样例内容）
      ④ 局部修改测试   PATCH  /api/checkins/{date}（只改固定样例里的那几个字段）
-     ⑤ 删除测试       DELETE /api/checkins/{date}（不可恢复，所以有二次确认）
+     ⑤ 删除测试       DELETE /api/checkins/{date}（软删除：数据留在库里、可用 A10 恢复；
+                        但页面没有恢复入口，所以照样二次确认）
 
    ④⑤ 是 2026-10-07 加的，和 ③ 刚好凑成一组对照：
      ③ 证明「写得进去」；④ 证明「只动想动的那几列，其余原样保留」；
@@ -26,6 +27,15 @@
 
   var BASE = window.dhlApi.API_BASE;
   var LIST_LIMIT = 30;   // 表格只摊最近 30 条，够看又不刷屏
+
+  // 把技术错误收敛成人话（Day 23 三类错误统一，与 api-source.js 同一规矩）：
+  // 浏览器原生的英文网络错误（"Failed to fetch" / "Unexpected token <"）不给用户看，
+  // 只有接口带回来的中文 error.message 才原样透传。
+  function humanMessage(e, fallback) {
+    var msg = (e && e.message) || '';
+    if (/[\u4e00-\u9fa5]/.test(msg)) return msg;
+    return fallback;
+  }
 
   // 写入测试用的固定样例内容（字段与契约 3.2 一致，全部合法值）
   var SAMPLE = {
@@ -160,7 +170,7 @@
       .catch(function (e) {
         renderHealth('bad', '连不上服务', '');
         $('health-error').hidden = false;
-        $('health-error').textContent = '连不上接口：' + ((e && e.message) || '网络不通') + '（页面仍可打开，只是取不到数据）';
+        $('health-error').textContent = '连不上接口：' + humanMessage(e, '网络不通') + '（页面仍可打开，只是取不到数据）';
       })
       .then(function () { $('btn-health').disabled = false; });
   }
@@ -218,7 +228,7 @@
         $('last-updated').textContent =
           '最后更新：本次检查 ' + stampNow() + ' · 取数据失败，这一行只说明检查时间';
         $('checkins-box').innerHTML =
-          '<p class="check-empty check-empty-bad">取数据失败：' + escapeHtml((e && e.message) || '未知错误') + '</p>';
+          '<p class="check-empty check-empty-bad">取数据失败：' + escapeHtml(humanMessage(e, '未知错误')) + '</p>';
       })
       .then(function () { $('btn-reload').disabled = false; });
   }
@@ -269,7 +279,7 @@
         loadCheckins();   // 立刻回读一次，让表格自己证明它真的进库了
       })
       .catch(function (e) {
-        showWriteError('没写上：' + ((e && e.message) || '未知错误'));
+        showWriteError('没写上：' + humanMessage(e, '未知错误'));
       })
       .then(function () {
         $('btn-write').disabled = false;
@@ -333,7 +343,7 @@
         loadCheckins();   // 立刻回读，让表格自己证明改动真的落库了
       })
       .catch(function (e) {
-        showPatchError('没改成：' + ((e && e.message) || '未知错误'));
+        showPatchError('没改成：' + humanMessage(e, '未知错误'));
       })
       .then(function () {
         $('btn-patch').disabled = false;
@@ -362,14 +372,15 @@
     }
 
     // 二次确认（AGENTS.md 第八条：页面上的删除操作必须二次确认）。
-    // 这里把即将被删掉的内容原样念出来，并明说不可恢复——不给「撤销」留幻想。
+    // 把即将删掉的内容原样念出来。接口已是软删除（数据留在库里、可用 A10 恢复），
+    // 但**页面上没有恢复入口**，所以对用户就按「删了就没了」说——不给他不存在的撤销预期。
     var ok = window.confirm(
       '要删掉 ' + date + ' 的这条记录吗？\n\n' +
       date + '：运动 ' + val(row.exerciseType) +
       ' / 午餐 ' + val(row.mealLunchText) +
       ' / 体重 ' + val(row.weightKg) +
       ' / 饮水 ' + val(row.waterMl) + '\n\n' +
-      '删了就回不来了，页面上没有撤销，只能重新打卡再记一遍。'
+      '删掉后页面上就没有这一条了，页面上没有撤销按钮，只能重新打卡再记一遍。'
     );
     if (!ok) return;
 
@@ -383,11 +394,12 @@
       .then(function (r) {
         if (!r.ok) { showDeleteError('没删掉：' + r.message); return; }
         $('delete-status').hidden = false;
-        $('delete-status').textContent = '删掉了：' + r.date + ' 这条记录已经不在库里了。';
+        // 诚实说法：接口是软删除，数据还在库里 —— 说「不在库里」是错的（2026-10-08 修正）
+        $('delete-status').textContent = '删掉了：' + r.date + ' 这条记录从页面上消失了（数据还在库里，走 A10 恢复接口能找回来）。';
         loadCheckins();   // 立刻回读，表格里那一行应该消失
       })
       .catch(function (e) {
-        showDeleteError('没删掉：' + ((e && e.message) || '未知错误'));
+        showDeleteError('没删掉：' + humanMessage(e, '未知错误'));
       })
       .then(function () {
         $('btn-delete').disabled = false;

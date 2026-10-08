@@ -1,4 +1,4 @@
-// handlers/checkins.js —— A4 · GET /api/checkins、A6 · PUT /api/checkins/{date}、A8 · PATCH /api/checkins/{date}、A9 · DELETE /api/checkins/{date}
+// handlers/checkins.js —— A4 · GET /api/checkins、A5 · GET、A6 · PUT、A8 · PATCH、A9 · DELETE、A10 · POST /{date}/restore
 //
 // 本层的职责边界：解析请求参数 → 校验 → 调 repository → 把结果包装成响应。
 // 这里不出现任何数据库查询语句（那是 repositories/ 的事），也不写字段校验规则（那是 validators/ 的事）。
@@ -209,29 +209,77 @@ async function handlePatchCheckin(res, date, req) {
 //   那天没记录返 404 + 中文（同 PATCH 的理由：删一个不存在的目标 = 目标不存在）。
 //   成功返 {ok:true,data:{date,deleted:true}}，不回 record —— 删了就是删了，没必要再回那条记录。
 //
-// 关于「不可恢复」：DELETE 是真删，前端必须二次确认（AGENTS.md 第八条第 5 项：
-//   涉及数据删除的功能页面上必须做二次确认，代码注释里写明「此操作不可恢复」）。
-//   **此操作不可恢复** —— 删掉的那天记录 created_at/updated_at 一起没了，
-//   无法通过日志找回，只能用 A6 PUT 重新写一条（但 created_at 会变成新的时间）。
+// ⚠️ 语义变更（2026-10-07，契约 4.11）：**从真删改成软删除**。
+//   对调用方**完全透明**：路径、方法、请求体、响应形状、404 条件全都没变，
+//   前端一行都不用改。变的只是内部：数据没真删，只是打了 is_deleted 标记。
+//   为什么改：真删不可逆 —— 误删一天的记录，created_at/updated_at 一起消失，
+//     只能用 PUT 重写一条（时间戳还变了）。软删之后误删可以用 A10 恢复。
+//
+//   因此这里**不再强调「不可恢复」**：现在可恢复了。
+//   但前端仍然应该做二次确认（AGENTS.md 第八条第 5 项），因为删除本身仍是
+//   用户不期望发生的操作，多问一句没有坏处。
 async function handleDeleteCheckin(res, date) {
   // ① 路径参数
   if (!isDateStr(date)) {
     return sendFail(res, 400, ERR.INVALID_PARAM, "地址里的日期格式不对，应该写成 2026-09-21 这样");
   }
 
-  // ② 查存在：那天没记录返 404 + 中文（不返 200 + deleted:false，因为「目标不存在」更诚实）
+  // ② 查存在：那天没记录（或已经被删过）返 404 + 中文
+  //   注意 existsByDate 带 visibleOnly —— 已软删的那天这里就是 false，
+  //   所以「重复删同一天」会拿到 404，而不是把标记再打一遍。
   const { exists, error: readError } = await checkinsRepo.existsByDate(date);
   if (readError) return sendDbError(res, "DELETE /api/checkins 查重", readError);
   if (!exists) {
     return sendFail(res, 404, ERR.NOT_FOUND, `${date} 那天没有打卡记录，删不了`);
   }
 
-  // ③ 删（**此操作不可恢复**，前端必须二次确认后才发请求）
-  const { error: deleteError } = await checkinsRepo.deleteByDate(date);
+  // ③ 软删除：数据留在库里，只把 is_deleted 置 true（可用 A10 恢复）
+  const { error: deleteError } = await checkinsRepo.softDeleteByDate(date);
   if (deleteError) return sendDbError(res, "DELETE /api/checkins 删除", deleteError, "记录没删掉，稍后再试一次");
 
-  // ④ 返响应：不回 record，只确认删了哪天
+  // ④ 返响应：形状与真删时完全一致（前端无感），不回 record
   return sendOk(res, { date, deleted: true });
 }
 
-module.exports = { handleListCheckins, handleGetCheckin, handlePutCheckin, handlePatchCheckin, handleDeleteCheckin };
+// A10 · POST /api/checkins/{date}/restore —— 恢复被删的单日记录（契约 4.11）
+//
+// 干什么：把 A9 打的 is_deleted 标记清掉，那天重新变成「可见」。
+//   这是软删除的存在意义 —— 删错了能找回来，这正是 A9 从真删改成软删的理由。
+//
+// 与其它接口的区别：POST 在这个项目里很罕见（单日记录一律走 PUT/PATCH/DELETE），
+//   这里用 POST 是因为它**不是幂等的创建**，而是一个动作（"恢复"这个操作）。
+//   路径上多一段 /restore 而不是复用 DELETE 加参数，是因为语义完全不同：
+//     DELETE /api/checkins/{date}          = 删掉这天
+//     POST   /api/checkins/{date}/restore  = 把删掉的那天找回来
+//
+// 为什么不用 PUT：PUT /api/checkins/{date} 是「保存内容」，会要求 11 个字段校验；
+//   恢复不需要任何字段（内容都在库里没动），用 PUT 反而要用户白白传一遍数据。
+//
+// 那天没有被删的记录（本来就没记录 / 从没删过）→ 404 + 中文，与 A9 对称。
+async function handleRestoreCheckin(res, date) {
+  // ① 路径参数
+  if (!isDateStr(date)) {
+    return sendFail(res, 400, ERR.INVALID_PARAM, "地址里的日期格式不对，应该写成 2026-09-21 这样");
+  }
+
+  // ② 恢复（repository 里会先找出最近标记删除的那一行，再清掉标记）
+  //   注意这里不能用 existsByDate 判存在 —— 它带 visibleOnly，已删的行它看不见，
+  //   而我们要找的恰恰是已删的行。所以交给 repository 返回 null 来表示「没得恢复」。
+  const { row, error } = await checkinsRepo.restoreByDate(date);
+  if (error) return sendDbError(res, "POST /api/checkins/restore", error);
+  if (!row) {
+    return sendFail(res, 404, ERR.NOT_FOUND, `${date} 这天没有被删掉的记录，不用恢复`);
+  }
+
+  // ③ 返响应：回恢复后的完整记录（前端能立刻看到内容回来了）
+  return sendOk(res, { date, restored: true, record: checkinToApi(row) });
+}
+
+module.exports = {
+  handleListCheckins,
+  handleGetCheckin,
+  handlePutCheckin,
+  handlePatchCheckin,
+  handleDeleteCheckin,
+  handleRestoreCheckin,
+};

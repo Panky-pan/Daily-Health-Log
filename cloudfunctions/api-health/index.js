@@ -12,7 +12,8 @@
 //     A5  GET /api/checkins/{date}   读单日记录（那天没打卡回 200 + record:null）
 //     A6  PUT /api/checkins/{date}   保存 / 覆盖单日记录（PUT 全量覆盖，唯一的 upsert 写入口）
 //     A8  PATCH /api/checkins/{date} 局部修改单日记录（只改请求体里出现的字段，没出现的字段不动）
-//     A9  DELETE /api/checkins/{date} 删除单日记录（**此操作不可恢复**，前端必须二次确认）
+//     A9  DELETE /api/checkins/{date} 删除单日记录（**软删除**：数据留着，只打 is_deleted 标记）
+//     A10 POST /api/checkins/{date}/restore 恢复被删的那天（把 A9 的标记清掉）
 //
 //   未实现（契约登记待做）：
 //     A7  POST /api/checkins/import  批量导入（本地数据迁移专用，可延后）
@@ -37,7 +38,7 @@ const { ERR } = require("./lib/errors");
 const { ALLOWED_ORIGINS } = require("./lib/config");
 const { handleHealth } = require("./handlers/health");
 const { handleGetSettings, handlePutSettings } = require("./handlers/settings");
-const { handleListCheckins, handleGetCheckin, handlePutCheckin, handlePatchCheckin, handleDeleteCheckin } = require("./handlers/checkins");
+const { handleListCheckins, handleGetCheckin, handlePutCheckin, handlePatchCheckin, handleDeleteCheckin, handleRestoreCheckin } = require("./handlers/checkins");
 
 // ---------------------------------------------------------------------------
 // CORS 白名单（2026-10-06 方案 A）：读写接口一律校验来源
@@ -106,13 +107,26 @@ const server = http.createServer(async (req, res) => {
       return await handleListCheckins(res, url.searchParams);
     }
 
-    // A5 · GET /api/checkins/{date}（读单日）/ A6 · PUT（保存 / 覆盖单日）/ A8 · PATCH（局部修改单日）/ A9 · DELETE（删除单日）
+    // A5 · GET /api/checkins/{date}（读单日）/ A6 · PUT（保存 / 覆盖单日）/ A8 · PATCH（局部修改单日）
+    // A9 · DELETE（软删除单日）/ A10 · POST /{date}/restore（恢复被删的那天）
     if (path.startsWith("/api/checkins/")) {
       const rest = path.slice("/api/checkins/".length);
       // A7 批量导入（POST /api/checkins/import）登记待实现，先当路径不存在（契约 4.8）
       if (rest === "import") return sendFail(res, 404, ERR.NOT_FOUND, "没有这个接口");
       // 只写到 /api/checkins/、后面没跟日期：这不是任何已登记的路径（契约 2.3 的 404）
       if (rest === "") return sendFail(res, 404, ERR.NOT_FOUND, "没有这个接口");
+
+      // A10 · POST /api/checkins/{date}/restore —— 恢复
+      // 必须在下面「按方法分发」之前拦下来：它的路径多一段 /restore，
+      // 若不先剥掉，rest 会变成 "2026-08-01/restore" 被当成日期，日期格式校验直接判错。
+      if (rest.endsWith("/restore")) {
+        const targetDate = rest.slice(0, -"/restore".length);
+        if (req.method !== "POST") return sendMethodNotAllowed(res, req.method);
+        return await handleRestoreCheckin(res, targetDate);
+      }
+      // 其余带斜杠的变体（如 /{date}/xxx）都是没登记过的路径
+      if (rest.includes("/")) return sendFail(res, 404, ERR.NOT_FOUND, "没有这个接口");
+
       if (req.method === "GET") return await handleGetCheckin(res, rest);
       if (req.method === "PATCH") return await handlePatchCheckin(res, rest, req);
       if (req.method === "DELETE") return await handleDeleteCheckin(res, rest);

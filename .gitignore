@@ -1,6 +1,7 @@
 # ===== 敏感信息：永远不上传 =====
 .env
 .env.*
+!.env.example
 *.pem
 *.key
 secrets.*

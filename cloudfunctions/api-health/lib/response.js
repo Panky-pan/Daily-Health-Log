@@ -42,9 +42,12 @@ function sendFail(res, statusCode, code, message, field) {
   sendJson(res, statusCode, { ok: false, error });
 }
 
-// 数据库读写失败 → 500 DB_ERROR（契约 2.3）。真实错误只进云端日志，不回给前端。
+// 数据库读写失败 → 500 DB_ERROR（契约 2.3）。
+// 真实错误只进云端日志（console.error），绝不拼进给前端的 message：
+//   错误对象里可能含 SQL 片段、表名、PG 错误码，泄露给任何能调接口的人等于把数据库内部结构摊开。
 // message 可覆盖：读失败说"取不出来"，写失败说"没存上"，都比一句笼统的"出错了"好懂。
-// where 是排查用的路标（例如 "PUT /api/checkins 写库"），重构后原样保留。
+// where 是排查用的路标（例如 "PUT /api/checkins 写库"）。
+// （2026-10-08 安全审计：移除曾用于排查的 "||| DEBUG" 拼接，改回纯中文 message，避免数据库内部结构泄露。）
 function sendDbError(res, where, error, message = "记录暂时取不出来，稍后再试") {
   console.error(`[api-health] ${where} 访问数据库失败:`, error);
   return sendFail(res, 500, ERR.DB_ERROR, message);

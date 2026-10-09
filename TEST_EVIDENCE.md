@@ -126,3 +126,37 @@ DELETE FROM public.checkins WHERE date IN ('2026-10-07','2026-10-08')  → 影�
 - 方式：`.upsert(..., {onConflict:"user_id,date"})` → 显式二段式（findByDate → 按 id UPDATE / INSERT，23505 并发兜底）
 - 部署：manageFunctions `updateFunctionCode`，2026-10-09 10:55 前后
 - 其余接口（A2/A3/A4/A5/A8/A9/A10）代码零改动，回归全部通过 = 未引入新问题
+
+---
+
+## 三、Day 24 复盘证据（2026-10-09 15:31~15:55，教学复盘：真复现 → 排除法定位 → 恢复修复 → 回归）
+
+> 目的：把修复版临时撤下、装回旧版代码，让 Bug 在 F12 里真实复现一次，全程亲手重走四步。
+
+### 3.1 复现（BEFORE，旧版代码部署后）
+
+- 部署：`git show 69262ca:...checkins.repository.js` 取回修复前旧版 → `updateFunctionCode` 部署
+- curl 实测：`PUT /api/checkins/2026-10-24` → **500** `{"ok":false,"error":{"code":"DB_ERROR","message":"记录没存上，稍后再试一次"}}`
+- 浏览器实测（Panky 的 F12 截图 1）：控制台红色报错 `PUT https://...tcloudbase... 500 (Internal Server Error)`（来源 api-source.js:24），地址栏可见；页面提示「云端暂时连不上…已先存本机 √」（本地兜底生效，数据未丢）
+
+### 3.2 定位：四嫌疑现场重跑
+
+| 嫌疑 | 验证手段 | 现场结果 | 结论 |
+|------|----------|----------|------|
+| 权限（42501 特征） | 查 `information_schema.table_privileges` | anon 有 INSERT/UPDATE/SELECT/DELETE 四项 | 排除 |
+| 索引缺失（42P10 特征） | 查 `pg_indexes` | `checkins_user_date_active_key` 在，但带 `WHERE (NOT is_deleted)`（部分唯一索引） | 未排除，升级为头号嫌犯 |
+| 部署未生效 | 日志特征行 + ModTime | （Day 23 已验证） | 排除 |
+| SQL/网关层 | CLS 搜 `DATABASE_42P10` | 4 条命中，含 Panky 浏览器那次 `request_id 12390bba`（15:39:06）与 curl 那次（15:35:04） | **定罪** |
+
+### 3.3 恢复修复版并验证（AFTER）
+
+- `git restore` 恢复工作区到 `4737255`（与修复版逐字节一致，grep 确认注释外无 onConflict 调用）→ 重新部署
+- `PUT /api/checkins/2026-10-24` → **200** `isNew:true`，GET 读回逐字段一致
+- 浏览器（Panky 的 F12 截图 2）：保存成功，控制台零报错（「未检测到任何问题」），真实打卡（瑜伽 15 分钟 / 三餐 / 56.2kg / 2000ml）同步上云——`GET /api/checkins/2026-10-09` 返回该记录实锤
+
+### 3.4 回归（同一清单重跑）
+
+- 链路 9/9：PUT 覆盖（`isNew:false`，整条覆盖生效）✓ GET ✓ PATCH 改体重（64.5→66，其余字段原样）✓ DELETE 软删 ✓ GET null ✓ restore ✓ GET 恢复 ✓
+  （首跑 PUT 用了非法类型「快走」→ 400 校验拒绝，属校验逻辑正常工作，换合法值后通过）
+- 无新问题引入：本次代码与 Day 23 回归时完全一致（`git restore` 至同一条提交），部署即该版本
+- 清理：`DELETE FROM public.checkins WHERE date='2026-10-24'` → 影响 1 行；库回 **total=11**（9 条 seed + 真实记录 10-06 / 10-09），测试数据零残留

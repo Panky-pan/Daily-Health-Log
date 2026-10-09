@@ -92,52 +92,81 @@ async function existsByDate(date) {
   return { exists: Array.isArray(data) ? data.length > 0 : Boolean(data), error: null };
 }
 
-// A6 保存（契约 4.7）：INSERT ... ON CONFLICT (user_id, date) DO UPDATE，
-// 一条语句搞定新建和覆盖，也就是 upsert。
+// A6 保存（契约 4.7）：**显式二段式 upsert** —— 先查可见行，有则按 id 整条覆盖，
+// 无则新插一行。对外行为与旧 upsert 完全一致，实现不再依赖 ON CONFLICT。
 //
-// ⚠️ 软删除对这里的影响（2026-10-07，真机踩坑后重写）：
-//   唯一约束从「全表唯一」换成了**部分唯一索引**（只对 is_deleted = false 的行生效）：
-//       CREATE UNIQUE INDEX checkins_user_date_active_key
-//         ON checkins (user_id, date) WHERE NOT is_deleted;
-//   PG 的 ON CONFLICT (user_id, date) 只是个列清单，要匹配部分索引**必须带上谓词**，
-//   而 PostgREST 会把 ON CONFLICT 的谓词从请求体里那行的 `is_deleted: false` 推断出来
-//   （predicate inference）。所以这一行的列清单里**必须真的有 is_deleted**，否则必报：
+// ⚠️ 为什么弃用 .upsert(..., { onConflict: "user_id,date" })（2026-10-09 真机定位）：
+//   软删除把唯一约束换成了部分唯一索引（WHERE NOT is_deleted）后，
+//   ON CONFLICT (user_id, date) 必须带上谓词才匹配得到它，而谓词靠 PostgREST
+//   从请求体里的 is_deleted: false 推断（predicate inference）。
+//   实测推断在当前网关上**不生效**——单对象、[row] 包数组两种写法全都报：
 //       DATABASE_42P10: there is no unique or exclusion constraint matching the ON CONFLICT specification
+//   线上佐证：request_id dc730d01-d21c-4a01-84a6-974b394e57e6（2026-10-09 10:49 日志，
+//   当时部署的已是 [row] + is_deleted: false 的写法）。
+//   这个推断依赖底层 SDK 与网关 PostgREST 的版本行为，太脆。
+//   二段式只依赖最普通的 UPDATE / INSERT，行为完全可控，也不再关心
+//   「SDK 什么时候设 ?columns=」这类内部细节。
 //
-//   ⚠️ 而「让 is_deleted 真的进列清单」正是这里写成**数组 [row]** 的唯一原因：
-//     底层 SDK（@cloudbase/node-sdk 的 rdb → wx-cloud-client-sdk）只在
-//     `Array.isArray(values)` 时才设置 PostgREST 的 `?columns=` 参数；
-//     传**单对象**时不设，PostgREST 就会把 payload 里为 null 的列从 INSERT 列清单剔除
-//     （契约 3.4 规定没填的字段一律 null），is_deleted 被剔掉 → 42P10。
-//     实测：单对象 100% 报 42P10；改成 [row] 后写入正常。
-//     **不要为了"简洁"把这里改回单对象。**
+// 语义逐条对齐旧 upsert：
+//   那天有可见记录 → 按 id 整条覆盖（SET 里不含 created_at，首次保存时间不变）；
+//   那天没有可见记录（从未写过 / 已被软删）→ INSERT 新行；
+//     已软删的旧行原样留在库里（保留历史），读取侧 visibleOnly 只看得到新行
+//     —— 这就是契约 4.7 的「重新打卡复活」。
 //
-//   语义（设计意图，不是 bug）：
-//     那天已有一行 is_deleted = true → 不参与冲突判定 → INSERT **新插一行**。
-//     表里于是有两行同日期（一行已删、一行有效），这是为了保留历史痕迹。
-//     读取侧靠 visibleOnly 只看到有效那行，业务上就是「重新打卡成功」。
+// 并发兜底（对应测试清单的"快速连点"用例）：两个请求同时走 INSERT，
+//   后到的会撞部分唯一索引（23505）。撞上时不直接报错：重查一次，
+//   可见行出现了就转覆盖分支重试，仍失败才把错误交回 handler。
 //
-// updated_at 在这里显式给值（故意的，不用触发器：规则留在代码里一眼能看见）；
-// created_at 不在 SQL 里出现，所以覆盖时它保持首次保存的时间。
+// updated_at 在这里显式给值（故意的，不用触发器：规则留在代码里一眼能看见）。
 //
 // @param {Object} values 已校验过的字段（键即数据库列名，未填的为 null）
 // @param {string} date   YYYY-MM-DD
 // @returns {Promise<{row: Object|null, error: *}>} row = 写库直接回传的那行，可能为 null
 async function saveCheckin(values, date) {
-  const { data, error } = await getDb()
-    .from(TABLE)
-    .upsert(
-      // 数组包一层：唯一目的是触发 SDK 设置 ?columns=（见上方长注释，改回单对象必炸）
-      [
-        // is_deleted 显式写 false：① 重新打卡那天时新行必须可见；
-        // ② 它更是让 ON CONFLICT 能匹配上部分索引谓词的关键，不能省。
-        { ...values, user_id: USER_ID, date, is_deleted: false, updated_at: new Date().toISOString() },
-      ],
-      { onConflict: "user_id,date" }
-    )
-    .select();
+  const { row: existing, error: findError } = await findByDate(date);
+  if (findError) return { row: null, error: findError };
 
-  if (error) return { row: null, error };
+  // 分支一：有可见记录 → 按 id 整条覆盖（user_id / date 是定位键，不动）
+  if (existing) {
+    const { data, error } = await getDb()
+      .from(TABLE)
+      .update({ ...values, is_deleted: false, updated_at: new Date().toISOString() })
+      .eq("id", existing.id)
+      .eq("user_id", USER_ID)
+      .select();
+    if (error) return { row: null, error };
+    const row = Array.isArray(data) ? data[0] : data;
+    return { row: row || null, error: null };
+  }
+
+  // 分支二：没有可见记录 → 新插一行（含「软删后重新打卡」的复活场景）
+  const insertOnce = () =>
+    getDb()
+      .from(TABLE)
+      .insert([
+        { ...values, user_id: USER_ID, date, is_deleted: false, updated_at: new Date().toISOString() },
+      ])
+      .select();
+
+  let { data, error } = await insertOnce();
+
+  // 并发兜底：另一路请求抢先插了同一天的可见行（23505）→ 重查，改走覆盖
+  if (error) {
+    const again = await findByDate(date);
+    if (again.error) return { row: null, error };
+    if (again.row) {
+      const { data: updated, error: updateError } = await getDb()
+        .from(TABLE)
+        .update({ ...values, is_deleted: false, updated_at: new Date().toISOString() })
+        .eq("id", again.row.id)
+        .eq("user_id", USER_ID)
+        .select();
+      if (updateError) return { row: null, error: updateError };
+      const row = Array.isArray(updated) ? updated[0] : updated;
+      return { row: row || null, error: null };
+    }
+    return { row: null, error };
+  }
 
   const row = Array.isArray(data) ? data[0] : data;
   return { row: row || null, error: null };

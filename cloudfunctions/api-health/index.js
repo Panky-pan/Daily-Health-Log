@@ -73,6 +73,22 @@ process.on("unhandledRejection", (reason) => {
 // ---------------------------------------------------------------------------
 
 const server = http.createServer(async (req, res) => {
+  // ---------------------------------------------------------------------------
+  // 请求日志（2026-10-08 加）：时间 / 路径 / 结果
+  // ---------------------------------------------------------------------------
+  // 挂在服务入口这一处，403 / OPTIONS / 404 / 405 / 200 / 500 全部自动覆盖，
+  // 不用在每个 handler 里重复写。
+  // 为什么用 res 的 "finish" 事件而不是在这里直接打印：响应结束时状态码才
+  // 确定，这样才能记下"结果"（成功还是 404 / 405 / 500）。
+  // 只记方法、路径、状态码、耗时 —— 不记请求体，避免把三餐 / 体重写进日志。
+  const startedAt = Date.now();
+  const logPath = (req.url || "/").split("?")[0]; // 去掉查询串，保证一行清爽
+  res.on("finish", () => {
+    console.log(
+      `[api-health] ${new Date().toISOString()} ${req.method} ${logPath} → ${res.statusCode} (${Date.now() - startedAt}ms)`
+    );
+  });
+
   // CORS 白名单：名单外的来源（含它发的预检请求）一律 403，先于所有路由与 OPTIONS
   if (!originAllowed(req)) {
     return sendFail(res, 403, ERR.FORBIDDEN, "这个来源不在允许名单里");

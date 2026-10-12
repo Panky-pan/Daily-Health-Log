@@ -1,0 +1,63 @@
+# =============================================================================
+# 把「网页外壳」自动发布到 GitHub Pages
+#
+# 为什么要有这个文件：
+#   仓库根目录里混着很多不该上网的东西 —— 云函数源码、SQL、全部 .md 文档、
+#   以及内部检查台 check.html。如果直接在 GitHub 设置里选「main 分支 / 根目录」
+#   发布，这些统统会变成可访问的网页。
+#
+#   所以这里用「白名单」方式：先只挑出 *.html 与 assets/ 拷到一个临时目录，
+#   再把这个临时目录推到 gh-pages 分支。仓库主干一行没动，站点干净。
+#
+# 触发时机：push 到 main，或在 GitHub 网页上手动点「Run workflow」。
+# 首次使用前置条件：Settings → Pages → Source = Deploy from a branch → gh-pages / (root)
+# =============================================================================
+
+name: 部署前端到 GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+# 同一时间只跑一次发布，后一次顶掉前一次（避免两个 commit 抢着推 gh-pages）
+concurrency:
+  group: pages-deploy
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出源码
+        uses: actions/checkout@v4
+
+      - name: 暂存白名单文件
+        run: |
+          set -e
+          mkdir -p _site
+          cp *.html _site/
+          cp -r assets _site/
+
+          # 内部检查台：含「写入测试」按钮，绝不能对外，从发布包里剔除
+          rm -f _site/check.html
+          rm -f _site/assets/js/check.js
+
+          # 关掉 Jekyll：否则 GitHub Pages 会忽略下划线开头的文件并尝试构建
+          touch _site/.nojekyll
+
+          echo "===== 本次将发布以下文件 ====="
+          find _site -type f | sort
+          echo "=============================="
+
+      - name: 发布到 gh-pages 分支
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./_site
+          publish_branch: gh-pages
+          force_orphan: true
+          commit_message: "chore(pages): 自动发布 ${{ github.sha }}"

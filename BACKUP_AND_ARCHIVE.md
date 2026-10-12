@@ -218,7 +218,18 @@ node tools/backup-tool.js export --label pre-expiry --out .workbuddy/drill/backu
    - 复核：`GET /api/checkins` → `{"ok":true,"data":{"items":[],"total":0}}`；`GET /api/settings` → `{"ok":true,"data":{"settings":null}}`
    - 结论：**两表 0 行**（注：自增序列未重置，首条新记录 id 从 4 开始，不影响业务）
 2. **新增工具** `tools/backup-tool.js`，`export / verify / compare / restore --dry-run` 四路实测通过。
-3. **代码归档**：本文件 + 工具 + 两份更新文档，提交并推送到 GitHub `main`（commit 见 §8 尾注）。
+3. **代码归档**：本文件 + 工具 + 两份更新文档，已在本地提交为 commit **`accb7a1`**（4 文件 / +657 −38）。
+4. **推送通道实况（必读）**：本次推送**只能在你本机的 Git Bash 里执行**。实测结论——沙箱环境到 GitHub 有两条路，**两条都通不了**：
+   - `git push` → 代理**拦截 `github.com`**（`CONNECT tunnel failed, response 502`），直连又超时；
+   - GitHub 连接器 API 写入 → **只读权限**（`403 Resource not accessible by integration`），建不了 tree/commit。
+
+   而 `api.github.com` **读**是通的（HTTP 200），所以**推送完成后，可由沙箱远程核验**，不需要本机 git。
+
+   本机执行（你已在 `D:\Projects\Daily-Health-Log` 目录下，直接跑这一条）：
+   ```
+   git push -u origin main
+   ```
+   看到输出里出现 `accb7a1..` 与 `main -> main` 即成功。
 
 ---
 
@@ -240,3 +251,5 @@ node tools/backup-tool.js export --label pre-expiry --out .workbuddy/drill/backu
 8. **CLS 日志只留 7 天**：别指望用服务端日志回溯数据；**数据库状态比日志更硬**。
 9. **`anon` 无鉴权**：接口链接绝不可外传；未来接入登录后，本手册的备份策略需重新评估。
 10. **备份是快照，不是同步**：备份不会自动跟进新记录，**每次要留档时都要重新 `export` 一份**。
+11. **推送只能在本机做**：自动化沙箱到 `github.com` 的两条写入通道都被挡住（代理拦截 + 连接器只读），所以「提交并推送到 GitHub」这一步**必须由你本机那条 `git push` 收尾**。别以为代码改了就等于上云了 —— **commit 只是本地的，push 才是永久的。**
+12. **推送成功后要复核**：本机 `git push` 的输出、远程 `main` 的 commit、以及 `git diff --stat HEAD origin/main`（应为空）三处对齐，才算「已永久保存」（见 §7-A）。

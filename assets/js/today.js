@@ -7,6 +7,8 @@
                   只留今日目标（含提醒条）、打卡入口、连续天数、健康分四块。
                   表单逻辑（校验/保存/回填）全部迁到 checkin.js，本页不再引用
                   calories.js 与 validate.js。
+   Day 27：入口卡补「取消今天打卡」（后端 A9 删除接口的第一个业务页面调用方），
+           解决试用者「记录记错了没法取消」的卡点。
    ============================================ */
 
 (function () {
@@ -47,6 +49,9 @@
   var entryCard = document.getElementById('checkin-entry-card');
   var entryHint = document.getElementById('checkin-entry-hint');
   var entryBtn = document.getElementById('checkin-entry-btn');
+  var deleteBtn = document.getElementById('btn-delete-checkin');
+  var deleteError = document.getElementById('delete-checkin-error');
+  var deleteStatus = document.getElementById('delete-checkin-status');
   var streakCard = document.getElementById('streak-card');
   var streakCurrent = document.getElementById('streak-current');
   var streakLongest = document.getElementById('streak-longest');
@@ -84,10 +89,7 @@
     entryCard.hidden = false;
     streakCard.hidden = false;
     dietCard.hidden = false;
-    renderStreak();
-    renderReminder();
-    renderCheckinEntry();
-    renderDietScore();
+    renderAfterRecordChange();
   }
 
   settingsForm.addEventListener('submit', function (e) {
@@ -112,16 +114,36 @@
     }
     if (bad) return;
 
-    var ok = window.dhlStorage.saveSettings({
+    var payload = {
       goalExerciseMinutes: minutes,
       goalWaterMl: water
-    });
+    };
+
+    // 云端优先（Day 27 修复「死循环」）：本次页面数据来自云端时，目标**必须写进
+    // 云端** —— 老逻辑只写 localStorage，一刷新云端仍是 null，设置表单又回来，
+    // 试用者永远走不出第一步（2026-10-11 实测，原话「我陷入了死循环」）。
+    // 成功后还要 putRemoteSettings 更新覆盖层，否则本页读到的仍是 null（坑 #5 同款）。
+    if (window.dhlApi && window.dhlStorage.isRemote()) {
+      window.dhlApi.saveSettings(payload).then(function (r) {
+        if (r.ok) {
+          window.dhlStorage.putRemoteSettings(r.settings);
+          showGoalCard(r.settings);
+        } else {
+          settingsSaveError.textContent = '目标没存上：' + r.message + '，等网络好了再试一次';
+          settingsSaveError.hidden = false;
+        }
+      });
+      return;
+    }
+
+    // 云端没接上（本次整页跑的都是本地数据）：落本地（Day 14 的原行为）
+    var ok = window.dhlStorage.saveSettings(payload);
     if (!ok) {
       settingsSaveError.textContent = '没存上，检查一下浏览器存储设置再试试';
       settingsSaveError.hidden = false;
       return;
     }
-    showGoalCard({ goalExerciseMinutes: minutes, goalWaterMl: water });
+    showGoalCard(payload);
   });
 
   changeGoalBtn.addEventListener('click', function () {
@@ -175,6 +197,7 @@
     if (!record) {
       entryHint.textContent = '今天还没记，花一分钟填一下运动、三餐和饮水吧。';
       entryBtn.textContent = '去打卡';
+      deleteBtn.hidden = true;   // 今天没记录 → 没有东西可以取消
       return;
     }
     var summary = buildRecordSummary(record);
@@ -182,7 +205,66 @@
       ? '今天已经记过了：' + summary
       : '今天已经记过了，点一下可以改。';
     entryBtn.textContent = '修改记录';
+    deleteBtn.hidden = false;
   }
+
+  // 打卡记录一变（新增 / 修改 / 删除），依赖它的四块要一起重画。
+  // 分成一个函数是因为删除后必须整组刷新：只刷入口卡的话，连续天数和健康分
+  // 会留着删掉之前的值，看起来像"删了但没删干净"。
+  function renderAfterRecordChange() {
+    renderCheckinEntry();
+    renderStreak();
+    renderReminder();
+    renderDietScore();
+  }
+
+  /* ---- 取消今日打卡（Day 27 新增，接上后端 A9 删除接口）----
+     为什么补这个入口：Day 27 第三方试用时，试用者卡在脚本第 8 步「把今天这条
+     取消掉」—— 页面上根本无处可点（A9 接口一直存在，但前端从没接过），
+     记录记错了就没有退路。所以这一版把「删」补进闭环。 */
+  deleteBtn.addEventListener('click', function () {
+    var date = todayStr();
+    var record = window.dhlStorage.getCheckins()[date];
+    if (!record) return;   // 理论上到不了：没记录时按钮是隐藏的
+
+    var summary = buildRecordSummary(record);
+    var ok = window.confirm(
+      '确定取消今天的打卡吗？\n\n' +
+      (summary ? summary + '\n\n' : '') +
+      '取消后今日页会回到「今天还没记」，想重新记一遍点「去打卡」再填一次。'
+    );
+    if (!ok) return;
+
+    deleteError.hidden = true;
+    deleteStatus.hidden = true;
+
+    // 云端连接没加载上时只能删本机那份 —— 那等于删了个假的（云端还在），
+    // 所以直接拦住并说清楚，不假装成功（沿用 E7「不假装成功」的规矩）。
+    if (!window.dhlApi || typeof window.dhlApi.deleteCheckin !== 'function') {
+      deleteError.textContent = '云端连接没加载上，这次没法取消，刷新页面再试一次';
+      deleteError.hidden = false;
+      return;
+    }
+
+    deleteBtn.disabled = true;
+    deleteBtn.textContent = '正在取消…';
+
+    window.dhlApi.deleteCheckin(date).then(function (r) {
+      deleteBtn.disabled = false;
+      deleteBtn.textContent = '取消今天打卡';
+
+      if (!r.ok) {
+        deleteError.textContent = '没取消掉：' + r.message + '，等网络好了再试一次';
+        deleteError.hidden = false;
+        return;
+      }
+      // 云端删掉了 → 覆盖层和本地各抹一份，否则合并视图会让这条记录"复活"
+      window.dhlStorage.removeCheckin(date);
+      renderAfterRecordChange();
+      deleteStatus.textContent = '已取消今天的打卡 ✓ 想重新记，点「去打卡」再来一次';
+      deleteStatus.hidden = false;
+    });
+  });
 
   /* ============ 四、streak 大字区 + 目标提醒条（F5） ============ */
 

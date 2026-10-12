@@ -16,6 +16,9 @@
    这个内存覆盖层（putRemoteCheckin），所以保存完立刻回今日页看到的就是新值，
    一刷新也从云端读回来，不会再"回退成旧记录"。
    只有云端写失败时才回落写本地（saveCheckin），页面上会明说"已存本机"。
+
+   **删**（Day 27 接上 A9）：取消今日打卡时云端删成功，再调 removeCheckin()
+   把覆盖层和本地各抹一份 —— 只抹一处的话，另一处会让这条记录"复活"。
    ============================================ */
 
 (function () {
@@ -182,11 +185,50 @@
     return true;
   }
 
+  /**
+   * 删掉某天的记录：云端覆盖层 + 本地各删一份（Day 27 新增，配合 A9 删除接口）。
+   *
+   * 为什么两处都要删：getCheckins() 是「本地打底 + 云端覆盖」的合并视图
+   * （合并规则见下面 getCheckins：**云端为准，本地独有的日期会被保留**）。
+   * 所以只从覆盖层删的话，本地那份旧记录会立刻"复活" —— 页面上看着就像没删掉。
+   * 这也是「删除」与「保存」在数据层最大的不同：保存是往上覆盖，删除必须两处抹平。
+   *
+   * 为什么不复用 saveCheckin：那个是"写入"，这里是"抹掉"，语义相反。
+   *
+   * @param {string} date 日期 YYYY-MM-DD
+   * @returns {boolean} 本地那份是否处理成功（true = 本地没有这条，或已删干净）
+   */
+  function removeCheckin(date) {
+    if (remote) delete remote.checkins[date];
+
+    var all = read(KEYS.checkins, {});
+    if (!Object.prototype.hasOwnProperty.call(all, date)) return true;
+    delete all[date];
+    return write(KEYS.checkins, all);
+  }
+
   /* ---- settings：全局目标设置（PRD 6.2） ---- */
   // 读设置；没有返回 null（调用方据此判断“首次使用”→ 显示设置表单）
   function getSettings() {
     if (remote) return remote.settings;
     return read(KEYS.settings, null);
+  }
+
+  /**
+   * 云端目标保存成功后，把新设置就地更新进覆盖层（Day 27 新增，配合 A3）。
+   *
+   * 与 putRemoteCheckin 完全同理：覆盖层一旦存在，getSettings() 就只读它。
+   * 保存后若不更新，页面读到的还是旧值/null，一刷新表单又回来 ——
+   * 2026-10-11 试用实测：试用者原话「我陷入了死循环」，根因就是保存只进了
+   * localStorage、覆盖层与云端都没动。
+   *
+   * @param {Object} settings 云端回传的设置（含服务端补的 startDate）
+   * @returns {boolean} 覆盖层是否处于生效状态（false = 本次走的是本地兜底）
+   */
+  function putRemoteSettings(settings) {
+    if (!remote) return false;
+    remote.settings = settings;
+    return true;
   }
 
   // 保存目标设置。成功返回 true，失败返回 false（E7）
@@ -241,9 +283,11 @@
     BACKUP_KEY: KEYS.backupV1,
     getSettings: getSettings,
     saveSettings: saveSettings,
+    putRemoteSettings: putRemoteSettings,
     getCheckins: getCheckins,
     saveCheckin: saveCheckin,
     putRemoteCheckin: putRemoteCheckin,
+    removeCheckin: removeCheckin,
     applyRemote: applyRemote,
     isRemote: isRemote
   };

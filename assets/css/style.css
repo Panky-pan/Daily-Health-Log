@@ -263,6 +263,17 @@ body {
   background: var(--color-green-light);
 }
 
+/* ---- 卡片内的按钮行（2026-10-12 新增「取消今天打卡」入口时加的）----
+   主按钮和危险按钮并排时用 flex：窄屏自动换行（flex-wrap），
+   360px 宽度下不会挤成一团；用空白符直接并排的话间距会忽大忽小。 */
+.card-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-top: 12px;
+}
+
 /* ---- 键盘焦点可见性（Day 9 审查问题 2）----
    :focus-visible 只在键盘 Tab 导航时显示光环，鼠标点击不出现、外观不受影响。
    覆盖全站可点元素：导航链接 / 按钮 / 三餐标签 / 日历已打卡格子 */

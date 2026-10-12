@@ -6,10 +6,12 @@
       交给 storage.js 的「云端覆盖层」，页面照旧从 dhlStorage 读数；
    2. 写：打卡页保存时调 saveCheckin()，把这一天的记录 PUT 到云端
       （A6 PUT /api/checkins/{date}，upsert 全量覆盖）；
-   3. 改 / 删（2026-10-07 新增，目前只有检查台 check.html 在用）：
-      patchCheckin()  只改指定的那几个字段（A8 PATCH），其余列原样保留；
-      deleteCheckin() 删掉某天的整条记录（A9 DELETE，**软删除**：数据留在库里，
-                      接口层面可用 A10 POST /{date}/restore 恢复；但页面没有恢复入口）。
+   3. 改 / 删（2026-10-07 新增）：patchCheckin() 只改指定的那几个字段（A8 PATCH），
+      其余列原样保留；deleteCheckin() 删掉某天的整条记录（A9 DELETE，**软删除**：
+      数据留在库里，接口层面可用 A10 POST /{date}/restore 恢复；但页面没有恢复入口）。
+      2026-10-07 时只有检查台 check.html 在用 deleteCheckin；
+      2026-10-12（Day 27）起，今日页和打卡页的「取消今天打卡」也走它了 ——
+      patchCheckin 至今仍只有检查台在用。
 
    为什么要单独一层（而不是各页面各写一遍 fetch）：
    1. storage.js 是全项目唯一的数据出入口（它自己的文件头就是这么写的），
@@ -183,6 +185,41 @@
   }
 
   /**
+   * A3 写接口：保存 / 修改目标设置（契约 4.3，upsert；startDate 首次创建时
+   * 由服务端取「当天」，前端不用传）。
+   *
+   * 为什么 2026-10-11 才补上它：A3 上线时前端从没接过 —— 表单保存一直只写
+   * localStorage（Day 14 的老逻辑）。库里一直有 seed 建的 settings 行，
+   * 所以「设置表单 + 云端写入」这条路在线上从未真正走过；Day 27 试前清空
+   * 数据库后，真人第一次踩进这个洞：保存只进了本机，一刷新云端仍是 null，
+   * 表单又回来 —— 试用者原话「我陷入了死循环」。
+   *
+   * 失败处理与 saveCheckin 同一约定：收敛成 { ok:false, message }，永不 reject。
+   *
+   * @param {Object} settings { goalExerciseMinutes, goalWaterMl }（camelCase）
+   * @returns {Promise<{ok: true, settings: Object} | {ok: false, message: string}>}
+   */
+  function saveSettings(settings) {
+    return fetch(API_BASE + '/api/settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(settings || {})
+    })
+      .then(function (res) {
+        return res.json().then(function (body) {
+          if (!res.ok || !body || body.ok !== true) {
+            var msg = (body && body.error && body.error.message) || ('保存失败（HTTP ' + res.status + '）');
+            return { ok: false, message: msg };
+          }
+          return { ok: true, settings: body.data.settings };
+        });
+      })
+      .catch(function (e) {
+        return { ok: false, message: humanMessage(e, '网络不通，目标没存上') };
+      });
+  }
+
+  /**
    * 取云端数据（只取一次）。
    * @returns {Promise<{ok: boolean, count?: number, reason?: string}>}
    *   永远 resolve，不 reject —— 调用方不需要写 catch。
@@ -231,6 +268,7 @@
     load: load,
     ready: ready,
     saveCheckin: saveCheckin,
+    saveSettings: saveSettings,
     patchCheckin: patchCheckin,
     deleteCheckin: deleteCheckin,
     getResult: function () { return result; }

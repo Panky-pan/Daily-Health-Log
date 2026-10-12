@@ -101,6 +101,13 @@
         <button type="submit" class="btn" id="checkin-submit">保存今日打卡</button>
       </form>
 
+      <!-- 取消今日打卡（Day 27 新增）：只在「今天已经记过」时出现（checkin.js 控制），
+           点了就回今日页 —— 那一页立刻变回「今天还没记」。 -->
+      <div class="card-actions" id="checkin-delete-row" hidden>
+        <button type="button" class="btn btn-danger" id="btn-delete-checkin">取消今天打卡</button>
+      </div>
+      <p class="field-error" id="delete-checkin-error" hidden></p>
+
       <!-- 保存后的状态与卡路里结果 -->
       <p class="checkin-status" id="checkin-status" hidden></p>
       <p class="calorie-note" id="calorie-note" hidden></p>

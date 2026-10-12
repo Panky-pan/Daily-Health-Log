@@ -52,11 +52,19 @@
     </section>
 
     <!-- 打卡入口卡（Day 14）：本页不再放表单，只报"今天记了没" + 一条去打卡的路。
-         表单搬到了 checkin.html，记完自动跳回本页。 -->
+         表单搬到了 checkin.html，记完自动回本页。
+         Day 27：补上「取消今天打卡」—— 后端 A9 删除接口早就有，前端一直没入口，
+         试用者卡在"怎么把记录取消掉"这一步（页面上无处可点）。按钮只在今天
+         已经记过时出现，由 today.js 控制显示。 -->
     <section class="card" id="checkin-entry-card" hidden>
       <h2 class="card-title">今日打卡</h2>
       <p class="card-hint" id="checkin-entry-hint"></p>
-      <a class="btn" href="checkin.html" id="checkin-entry-btn">去打卡</a>
+      <div class="card-actions">
+        <a class="btn" href="checkin.html" id="checkin-entry-btn">去打卡</a>
+        <button type="button" class="btn btn-danger" id="btn-delete-checkin" hidden>取消今天打卡</button>
+      </div>
+      <p class="field-error" id="delete-checkin-error" hidden></p>
+      <p class="checkin-status" id="delete-checkin-status" hidden></p>
     </section>
 
     <!-- streak 大字区（第 4 步）：连续打卡天数 + 历史最长 -->

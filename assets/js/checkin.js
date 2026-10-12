@@ -7,6 +7,10 @@
      先 PUT 云端（A6），成功 → 更新内存覆盖层，回今日页看到的就是新值；
      失败 → 回落写本地，并明说「已存本机」，绝不假装成功（PRD E7）。
    保存成功后停在页面约 0.9 秒，让用户看到「已存好」再自动返回 index.html。
+
+   Day 27 新增「取消今天打卡」：接上后端 A9 删除接口（前端第一个业务页面调用方，
+   此前只有不可外传的检查台在用）。删除是软删除，但页面没有恢复入口，
+   所以点之前必须先弹二次确认。
    ============================================ */
 
 (function () {
@@ -56,6 +60,9 @@
   var saveError = document.getElementById('checkin-save-error');
   var statusText = document.getElementById('checkin-status');
   var calorieNote = document.getElementById('calorie-note');
+  var deleteRow = document.getElementById('checkin-delete-row');
+  var deleteBtn = document.getElementById('btn-delete-checkin');
+  var deleteError = document.getElementById('delete-checkin-error');
 
   var MEAL_KEYS = ['breakfast', 'lunch', 'dinner'];
 
@@ -268,7 +275,55 @@
     }
   }
 
-  /* ============ 四、页面初始化 ============ */
+  /* ============ 四、取消今日打卡（Day 27 新增，接上 A9 删除接口） ============ */
+
+  // 为什么放在这一页：本页就是「今天这一笔」的编辑页 —— 能改就该能撤，
+  // 把「取消」摆在「保存」旁边，不用再回今日页找。
+  // 触发原因：Day 27 试用实测，页面上完全没有删除入口，试用者只能开口问怎么删
+  //（后端 A9 DELETE 一直存在，但前端从没接过，检查台 check.html 除外）。
+  deleteBtn.addEventListener('click', function () {
+    var date = todayStr();
+    var record = window.dhlStorage.getCheckins()[date];
+    if (!record) return;   // 理论上到不了：今天没记录时这一行是隐藏的
+
+    var ok = window.confirm(
+      '确定取消今天的打卡吗？\n\n' +
+      '取消后今天就不算打卡了，今日页会回到「今天还没记」，连续天数也跟着变。\n' +
+      '想重新记一遍，回今日页再点「去打卡」填一次就行。'
+    );
+    if (!ok) return;
+
+    deleteError.hidden = true;
+
+    // 云端连接没加载上就只能删本机那份（云端还留着），不能假装删掉了（E7）
+    if (!window.dhlApi || typeof window.dhlApi.deleteCheckin !== 'function') {
+      deleteError.textContent = '云端连接没加载上，这次没法取消，刷新页面再试一次';
+      deleteError.hidden = false;
+      return;
+    }
+
+    deleteBtn.disabled = true;
+    deleteBtn.textContent = '正在取消…';
+
+    window.dhlApi.deleteCheckin(date).then(function (r) {
+      if (!r.ok) {
+        deleteBtn.disabled = false;
+        deleteBtn.textContent = '取消今天打卡';
+        deleteError.textContent = '没取消掉：' + r.message + '，等网络好了再试一次';
+        deleteError.hidden = false;
+        return;
+      }
+      // 云端删掉了 → 覆盖层和本地各抹一份，否则合并视图会让这条记录"复活"
+      window.dhlStorage.removeCheckin(date);
+      setStatus('已取消今天的打卡 ✓ 正在返回…');
+      lockSubmit('已取消，返回中…');
+      window.setTimeout(function () {
+        window.location.href = 'index.html';
+      }, BACK_DELAY_MS);
+    });
+  });
+
+  /* ============ 五、页面初始化 ============ */
 
   function init() {
     window.dhlStorage.ensureMeta();
@@ -291,6 +346,7 @@
       fillFormWithRecord(today);
       setStatus('今天已经记过了，改完再存会覆盖原来那条');
       submitBtn.textContent = '更新今日打卡';
+      deleteRow.hidden = false;   // 有记录才有「取消」可点（Day 27）
       if (today.exerciseCalories && today.exerciseType) {
         calorieNote.textContent = today.exerciseType + ' ' + today.exerciseMinutes +
           ' 分钟 ≈ ' + today.exerciseCalories + ' 大卡';

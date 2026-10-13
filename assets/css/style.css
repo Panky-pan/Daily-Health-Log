@@ -1,0 +1,1216 @@
+/* ============================================
+   Daily-Health-Log 共用样式
+   原则：颜色只用下方 CSS 变量，全站三页统一
+   配色：奶油色底 + 绿色主色，圆角卡片 + 轻动效
+   ============================================ */
+
+:root {
+  /* ---- 颜色变量（全站唯一取色处） ---- */
+  --color-bg: #F7F2E4;          /* 奶油色页面底色 */
+  --color-card: #FDFBF3;        /* 卡片底色（比页面底色更亮） */
+  --color-green: #4C9A5F;       /* 主绿色（标题、强调） */
+  --color-green-light: #5BA85F; /* 亮绿（按钮、装饰） */
+  --color-green-pale: #E4EFDF;  /* 淡绿（选中态、标记底色） */
+  --color-text: #2F3B2F;        /* 正文深绿灰 */
+  --color-muted: #5C6654;       /* 次要文字（加深后对比度约 5.8:1，达 WCAG AA） */
+  --color-yellow: #F2C14E;      /* 提醒条黄（后续步骤用） */
+  --color-danger: #D25B4A;      /* 表单红字提示 */
+  --color-border: #E8E0CC;      /* 卡片描边 */
+  --color-skeleton: #EDE6D6;    /* 加载中骨架屏灰块（开屏页用） */
+
+  /* ---- 尺寸变量 ---- */
+  --radius: 16px;       /* 卡片圆角 */
+  --radius-sm: 10px;    /* 按钮、小元素圆角 */
+  --shadow: 0 2px 10px rgba(47, 59, 47, 0.06);
+}
+
+/* ---- 基础重置 ---- */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+/* hidden 属性强制生效：防止自定义 display（如 .streak-card 的 flex）
+   盖过浏览器默认的 display:none，导致本该隐藏的卡片露出来 */
+[hidden] { display: none !important; }
+
+body {
+  font-family: "PingFang SC", "Microsoft YaHei", sans-serif;
+  background-color: var(--color-bg);
+  color: var(--color-text);
+  min-height: 100vh;
+  line-height: 1.6;
+}
+
+/* ---- 页面主容器：内容居中，宽度收敛 ---- */
+.container {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 24px 16px 48px;
+}
+
+/* ---- 顶部导航 ---- */
+.site-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 24px;
+}
+
+.site-title {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--color-green);
+}
+
+.site-nav {
+  display: flex;
+  gap: 8px;
+  background: var(--color-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 6px;
+  box-shadow: var(--shadow);
+}
+
+.site-nav a {
+  display: block;
+  padding: 8px 16px;
+  border-radius: var(--radius-sm);
+  text-decoration: none;
+  color: var(--color-muted);
+  font-size: 14px;
+  font-weight: 600;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.site-nav a:hover {
+  color: var(--color-green);
+  background-color: var(--color-green-pale);
+}
+
+/* 当前页高亮：HTML 里给当前页的链接加 class="active" */
+.site-nav a.active {
+  color: #fff;
+  background-color: var(--color-green-light);
+}
+
+/* ---- 打卡独立页顶栏（Day 14 板块 A）----
+   这页不挂四项导航，只放一条「返回今日」，所以单给一条样式 */
+.page-header {
+  justify-content: flex-start;
+  gap: 14px;
+}
+
+.page-back {
+  padding: 8px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+  color: var(--color-green);
+  background: var(--color-green-pale);
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.page-back:hover {
+  color: #fff;
+  background: var(--color-green-light);
+}
+
+/* ---- 卡片：内容区的基础容器 ---- */
+.card {
+  background: var(--color-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 24px;
+  margin-bottom: 16px;
+}
+
+.card-title {
+  font-size: 18px;
+  font-weight: 700;
+  margin-bottom: 10px;
+}
+
+.card-hint {
+  font-size: 14px;
+  color: var(--color-muted);
+}
+
+/* ---- 表单基础（第 2 步起使用） ---- */
+.form-row {
+  margin: 16px 0;
+}
+
+.form-row label {
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.form-row input,
+.form-row select {
+  width: 100%;
+  max-width: 240px;
+  padding: 10px 12px;
+  font-size: 15px;
+  font-family: inherit;
+  color: var(--color-text);
+  background: #fff;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  outline: none;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.form-row input:focus,
+.form-row select:focus {
+  border-color: var(--color-green-light);
+  box-shadow: 0 0 0 3px var(--color-green-pale);
+}
+
+/* 文本框（三餐一句话）可以宽一点 */
+.form-row input[type="text"] {
+  max-width: 100%;
+}
+
+/* 运动类型 + 时长并排 */
+.inline-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.inline-row select,
+.inline-row input {
+  max-width: 160px;
+}
+
+/* ---- 三餐标签按钮：健康 / 普通 / 放纵（同组互斥单选） ---- */
+.tag-group {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.tag {
+  padding: 6px 16px;
+  font-size: 13px;
+  font-family: inherit;
+  color: var(--color-muted);
+  background: #fff;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+
+.tag:hover {
+  border-color: var(--color-green-light);
+  color: var(--color-green);
+}
+
+.tag.active {
+  color: var(--color-green);
+  font-weight: 700;
+  background: var(--color-green-pale);
+  border-color: var(--color-green-light);
+}
+
+/* 字段旁的红字提示（校验失败 / 保存失败） */
+.field-error {
+  font-size: 13px;
+  color: var(--color-danger);
+  margin-top: 4px;
+}
+
+/* ---- 按钮 ---- */
+.btn {
+  display: inline-block;
+  text-decoration: none;   /* Day 10：按钮常用 <a> 实现，去掉浏览器默认下划线 */
+  padding: 10px 22px;
+  font-size: 15px;
+  font-weight: 600;
+  font-family: inherit;
+  color: #fff;
+  background: var(--color-green-light);
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background-color 0.2s ease, transform 0.15s ease;
+}
+
+.btn:hover {
+  background: var(--color-green);
+}
+
+.btn:active {
+  transform: scale(0.97);
+}
+
+/* 次要按钮（如「改目标」）：透明底 + 绿描边 */
+.btn-ghost {
+  color: var(--color-green);
+  background: transparent;
+  border: 1px solid var(--color-green-light);
+}
+
+.btn-ghost:hover {
+  color: #fff;
+  background: var(--color-green-light);
+}
+
+/* ---- 卡片内的按钮行（2026-10-12 新增「取消今天打卡」入口时加的）----
+   主按钮和危险按钮并排时用 flex：窄屏自动换行（flex-wrap），
+   360px 宽度下不会挤成一团；用空白符直接并排的话间距会忽大忽小。 */
+.card-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-top: 12px;
+}
+
+/* ---- 键盘焦点可见性（Day 9 审查问题 2）----
+   :focus-visible 只在键盘 Tab 导航时显示光环，鼠标点击不出现、外观不受影响。
+   覆盖全站可点元素：导航链接 / 按钮 / 三餐标签 / 日历已打卡格子 */
+.site-nav a:focus-visible,
+.page-back:focus-visible,
+.btn:focus-visible,
+.tag:focus-visible,
+.cal-cell.checked:focus-visible {
+  outline: 2px solid var(--color-green-light);
+  outline-offset: 2px;
+}
+
+/* ---- 已设目标展示文字 ---- */
+.goal-text {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--color-green);
+  margin-bottom: 14px;
+}
+
+/* ---- 打卡保存后的状态与卡路里结果 ---- */
+.checkin-status {
+  margin-top: 16px;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--color-green);
+}
+
+.calorie-note {
+  margin-top: 4px;
+  font-size: 14px;
+  color: var(--color-muted);
+}
+
+/* ---- 今日饮食健康分卡片（PRD 6.4，2026-09-29）---- */
+.diet-card {
+  text-align: center;
+}
+
+.diet-score {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 6px;
+  margin: 2px 0 6px;
+}
+
+.diet-score-num {
+  font-size: 32px;   /* Day 14：原 40px，大字收一档（手机上还要再收，见媒体查询） */
+  font-weight: 800;
+  line-height: 1.1;
+  color: var(--color-green);
+}
+
+.diet-score-max {
+  font-size: 15px;
+  color: var(--color-muted);
+}
+
+.diet-score-hint {
+  font-size: 13px;
+  color: var(--color-muted);
+}
+
+/* ---- streak 大字区：两个数字并排 ---- */
+.streak-card {
+  display: flex;
+  gap: 32px;
+  justify-content: center;
+  padding: 16px;   /* Day 14：从 24 收到 16，卡片更扁 */
+}
+
+.streak-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.streak-num {
+  font-size: 32px;   /* Day 14：原 40px，大字收一档 */
+  font-weight: 800;
+  line-height: 1.1;
+  color: var(--color-green);
+}
+
+.streak-label {
+  font-size: 13px;
+  color: var(--color-muted);
+}
+
+/* ---- 目标提醒条（F5）：黄 = 未达标，绿 = 达标 ---- */
+.reminder {
+  display: block;
+  padding: 12px 18px;
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 16px;
+  animation: card-in 0.35s ease both;
+}
+
+.reminder-warn {
+  background: #FBF1CE;
+  color: #8A6A1F;
+  border: 1px solid var(--color-yellow);
+}
+
+.reminder-ok {
+  background: var(--color-green-pale);
+  color: var(--color-green);
+  border: 1px solid var(--color-green-light);
+}
+
+/* Day 14：提醒条搬进「今日目标」卡内部（不再单独占一块），
+   上下留白改由卡片自己负责，所以这里把外间距压掉 */
+.reminder-in-card {
+  margin: 0 0 14px;
+}
+
+/* ---- 历史页：统计卡三个数字并排 ---- */
+/* ---- 历史页：日历卡首行的统计（Day 14 收尾：原独立统计卡并进来） ----
+   原来三个数字单独占一张卡（约 82px 高 + 卡间距），现在压成一行小字，
+   数字仍用绿色加粗，但降级为"背景信息"；flex-wrap 保证 360px 下不横向溢出 */
+.cal-stats {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: center;
+  gap: 0 6px;
+  margin-bottom: 10px;
+  font-size: 13px;
+  color: var(--color-muted);
+}
+
+.cal-stats strong {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--color-green);
+}
+
+.cal-stats-sep {
+  color: var(--color-border);
+}
+
+/* ---- 历史页：日历（Day 14 压缩：格子改固定高度） ----
+   原来用 aspect-ratio: 1/1，桌面端 720px 宽时每格被撑到 ~96px 高，
+   六行日历光格子就 600px+，全页最占高度。改成固定高度后一屏能看完整月。 */
+.cal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.cal-nav {
+  padding: 6px 12px;
+  font-size: 13px;
+}
+
+.calendar-weekdays,
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+}
+
+.calendar-weekdays span {
+  text-align: center;
+  font-size: 11px;
+  color: var(--color-muted);
+  padding: 2px 0;
+}
+
+.cal-cell {
+  height: 40px;          /* 固定高度，不再跟着列宽变胖 */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-family: inherit;
+  color: var(--color-text);
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+}
+
+.cal-cell.checked {
+  background: var(--color-green-light);
+  color: #fff;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.cal-cell.checked:hover {
+  background: var(--color-green);
+}
+
+.cal-cell.today {
+  box-shadow: inset 0 0 0 2px var(--color-green);
+}
+
+.cal-cell.future {
+  color: #C9C2B0;
+}
+
+.cal-hint {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--color-muted);
+}
+
+/* ---- 历史页：单日详情 ---- */
+.detail-line {
+  padding: 6px 0;
+  border-bottom: 1px dashed var(--color-border);
+  font-size: 14px;
+}
+
+.detail-line:last-child {
+  border-bottom: none;
+}
+
+.detail-label {
+  font-weight: 700;
+  color: var(--color-green);
+}
+
+/* ---- Day 12：历史页饮食标签筛选 ---- */
+.filter-tags {
+  flex-wrap: wrap;   /* 360px 下四个胶囊放不下就换行，不许横向溢出 */
+}
+
+#filter-result {
+  margin-top: 4px;
+}
+
+.filter-hint {
+  padding: 6px 0;
+  font-size: 13px;
+  color: var(--color-muted);
+}
+
+/* ---- 筛选列表：请求失败态（Day 13 四态之一） ---- */
+.filter-error {
+  padding: 6px 0;
+  font-size: 13px;
+  color: var(--color-danger);
+}
+
+.filter-error + .btn {
+  margin-top: 6px;
+}
+
+/* ---- 趋势页：图表容器（Chart.js 需要固定高度的父容器） ---- */
+.chart-box {
+  position: relative;
+  height: 280px;
+}
+
+/* ============================================
+   开屏页（welcome.html）专用样式
+   ============================================ */
+
+/* ---- hero 区：一句话 + 主按钮 ---- */
+.hero {
+  text-align: center;
+  padding: 40px 24px 36px;
+  background: var(--color-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  margin-bottom: 16px;
+}
+
+.hero-title {
+  font-size: 30px;
+  font-weight: 800;
+  line-height: 1.3;
+  color: var(--color-green);
+}
+
+.hero-sub {
+  margin-top: 10px;
+  font-size: 15px;
+  color: var(--color-muted);
+}
+
+/* 主按钮：比普通按钮大一圈、更圆，是全页最显眼的可点元素 */
+.btn-hero {
+  margin-top: 22px;
+  padding: 14px 34px;
+  font-size: 17px;
+  border-radius: 999px;
+}
+
+.hero-note {
+  margin-top: 12px;
+  font-size: 13px;
+  color: var(--color-muted);
+}
+
+/* ---- Day 10：纯开屏布局（上下两段式）----
+   上段奶油底放品牌名 + 插画，插画下缘压过交界线；
+   下段淡绿色块铺满剩余屏幕，标题/按钮/小字排在色块内 */
+.splash {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.splash-top {
+  text-align: center;
+  padding: 28px 24px 0;
+}
+
+.splash-brand {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--color-green);
+}
+
+.splash-figure {
+  display: block;
+  width: min(64vw, 260px);
+  height: auto;
+  margin: 16px auto -42px;   /* 负下边距：插画压过色块交界，制造层次 */
+  position: relative;
+  z-index: 1;
+  /* 白底已抠成透明：用跟随轮廓的 drop-shadow 代替方形 box-shadow，
+     否则会透出一个矩形的"影子框" */
+  filter: drop-shadow(0 4px 12px rgba(47, 59, 47, 0.18));
+}
+
+.splash-band {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-green-pale);
+  text-align: center;
+  padding: 58px 24px 20px;
+}
+
+/* 标题深色为主、关键词点缀绿色：不再是全绿或全黑 */
+.splash-title {
+  font-size: 30px;
+  font-weight: 800;
+  line-height: 1.3;
+  color: var(--color-text);
+}
+
+.splash-title .accent {
+  color: var(--color-green);
+}
+
+.splash-band .hero-sub {
+  margin-top: 10px;
+  font-size: 15px;
+  color: var(--color-muted);
+}
+
+.splash-band .btn-hero {
+  align-self: center;
+  margin-top: 22px;
+}
+
+.splash-band .hero-note {
+  margin-top: 12px;
+  font-size: 13px;
+  color: var(--color-muted);
+}
+
+.splash-band .page-footer {
+  margin-top: auto;   /* 页脚贴住色块底部 */
+  padding-top: 24px;
+}
+
+/* ---- Day 11：主按钮状态机 ---- */
+
+/* 处理中：变灰锁死。必须写在 .btn:hover / .btn:active 之后，
+   优先级相同时按源码顺序覆盖，否则悬停变色会盖过禁用态 */
+.btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+  transform: none;      /* 禁掉 :active 的缩小，锁死后按下去不该有反应 */
+}
+
+.btn:disabled:hover {
+  background: var(--color-green-light);   /* 别再变深绿，明确"点了也没用" */
+}
+
+/* 失败提示：按钮上方的红字，出现时带淡入 */
+.hero-error {
+  margin-top: 14px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-danger);
+  animation: card-in 0.3s ease both;
+}
+
+/* ---- Day 11：泡泡戳破动画 ----
+   由 welcome.js 在点击时生成，position:fixed + 视口坐标定位；
+   升起 → 变大 → 消失，模拟被戳破 */
+.bubble {
+  position: fixed;
+  z-index: 10;
+  pointer-events: none;   /* 泡泡不挡鼠标，避免干扰连点测试 */
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.85);
+  border: 2px solid var(--color-green-light);
+  animation: bubble-pop 0.9s ease-out forwards;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes bubble-pop {
+    0%   { transform: translateY(0) scale(0.3); opacity: 0; }
+    20%  { opacity: 1; }
+    70%  { transform: translateY(-46px) scale(1); opacity: 0.9; }
+    100% { transform: translateY(-70px) scale(1.35); opacity: 0; }  /* 破 */
+  }
+
+  /* 小人持续微动效：缓慢上下浮，像举着胳膊在呼吸 */
+  .splash-figure {
+    animation: figure-float 2.6s ease-in-out infinite;
+  }
+
+  @keyframes figure-float {
+    0%, 100% { transform: translateY(0); }
+    50%      { transform: translateY(-8px); }
+  }
+
+  /* 点击瞬间：小人被"点醒"，向上多举一截再落回 */
+  .is-entering .splash-figure {
+    animation: figure-lift 0.9s ease-in-out;
+  }
+
+  @keyframes figure-lift {
+    0%   { transform: translateY(0); }
+    35%  { transform: translateY(-18px); }
+    100% { transform: translateY(0); }
+  }
+}
+
+/* ---- 预览区标题 ---- */
+.preview-title {
+  font-size: 17px;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.preview-hint {
+  font-size: 13px;
+  color: var(--color-muted);
+  margin-bottom: 14px;
+}
+
+/* ---- 空 / 出错：两种状态共用一块居中卡片 ---- */
+.state-box {
+  text-align: center;
+  padding: 32px 24px;
+  background: var(--color-card);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius);
+}
+
+.state-box-error {
+  border-color: var(--color-danger);
+}
+
+.state-title {
+  font-size: 16px;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.state-desc {
+  font-size: 14px;
+  color: var(--color-muted);
+  margin-bottom: 16px;
+}
+
+/* ---- 加载中：骨架屏（灰块 + 呼吸动画） ----
+   骨架屏的块数与排布，故意和「有数据」时的四张卡片对齐：
+   这样加载完切换时画面不会跳动，也让人一眼看出「这里马上会出现 4 张卡」 */
+.skeleton-cards {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.skeleton-card,
+.skeleton-line {
+  background: var(--color-skeleton);
+  border-radius: var(--radius-sm);
+}
+
+.skeleton-card {
+  height: 88px;
+}
+
+.skeleton-line {
+  height: 16px;
+  margin-bottom: 10px;
+}
+
+.skeleton-line-short {
+  width: 60%;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .skeleton-card,
+  .skeleton-line {
+    animation: skeleton-breath 1.4s ease-in-out infinite;
+  }
+  @keyframes skeleton-breath {
+    0%, 100% { opacity: 1; }
+    50%      { opacity: 0.5; }
+  }
+}
+
+/* ---- 有数据：今日概览四张卡片 ---- */
+.preview-cards {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.preview-card {
+  background: var(--color-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 16px 14px;
+}
+
+.preview-card-label {
+  font-size: 13px;
+  color: var(--color-muted);
+  margin-bottom: 6px;
+}
+
+.preview-card-value {
+  font-size: 24px;
+  font-weight: 800;
+  line-height: 1.2;
+  color: var(--color-green);
+}
+
+.preview-card-unit {
+  font-size: 13px;
+  font-weight: 600;
+  margin-left: 4px;
+}
+
+.preview-card-note {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--color-muted);
+}
+
+/* ---- 有数据：最近几天记录列表 ---- */
+.record-list {
+  list-style: none;
+  background: var(--color-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 8px 18px;   /* Day 9 审查问题 5：上下提到 8px，首尾行不再贴边 */
+}
+
+.record-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 0;
+  border-bottom: 1px dashed var(--color-border);
+}
+
+.record-row:last-child {
+  border-bottom: none;
+}
+
+.record-date {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 52px;
+}
+
+.record-md {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.record-wd {
+  font-size: 12px;
+  color: var(--color-muted);
+}
+
+.record-body {
+  flex: 1;
+  min-width: 0;   /* 关键：允许内部文字换行，不被长内容顶破整行 */
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.record-exercise {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.record-meta {
+  font-size: 12px;
+  color: var(--color-muted);
+}
+
+.record-weight {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--color-green);
+  white-space: nowrap;
+}
+
+/* ---- 手机端基础自适应（PRD 5.2：不错位即可，不追求完美适配） ---- */
+@media (max-width: 480px) {
+  .site-header {
+    flex-direction: column;
+    align-items: stretch;
+    text-align: center;
+  }
+
+  /* 打卡页顶栏例外：返回条和大标题挤在一行更省高度，别各占一整行 */
+  .page-header {
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-start;
+    text-align: left;
+  }
+
+  .page-back {
+    padding: 10px 14px;
+  }
+
+  /* Day 14：手机上整体收紧一档（用户反馈字号偏大、卡片高、要滑很久）。
+     思路是先砍留白（卡片内边距 / 卡片间距 / 顶栏下间距），再降标题和大数字；
+     正文与提示文案保持原大小，别把可读性一起砍掉。 */
+  .container {
+    padding: 16px 12px 32px;
+  }
+
+  .card {
+    padding: 18px;
+    margin-bottom: 12px;
+  }
+
+  .site-header {
+    margin-bottom: 16px;
+  }
+
+  .site-title {
+    font-size: 18px;
+  }
+
+  .card-title {
+    font-size: 16px;
+    margin-bottom: 8px;
+  }
+
+  .goal-text {
+    font-size: 15px;
+  }
+
+  .reminder {
+    padding: 10px 14px;
+    font-size: 13px;
+  }
+
+  .form-row {
+    margin: 14px 0;
+  }
+
+  .form-row label {
+    font-size: 13px;
+  }
+
+  .form-row input,
+  .form-row select,
+  .inline-row select,
+  .inline-row input {
+    padding: 9px 11px;
+    /* 手机上输入框固定 16px：iOS Safari 只要输入框字号小于 16px，
+       聚焦时就会自动放大整个页面（用户会以为页面"炸了"）。这里不能跟着缩。 */
+    font-size: 16px;
+  }
+
+  /* Day 14 收尾：日历格子手机上也用 40px（压缩时是 36px，触控目标偏小）。
+     7 列受屏宽所限，格子宽度约 41px 已到上限，只能从高度上补回来。 */
+  .streak-card {
+    padding: 14px;
+    gap: 20px;
+  }
+
+  /* 导航变四项后，窄屏必须允许换行并收紧内边距，否则会横向溢出 */
+  .site-nav {
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  .site-nav a {
+    padding: 12px 14px;
+    font-size: 13px;
+  }
+
+  /* Day 9 审查问题 3：手机上可点元素加高到约 44px（触控目标最低标准），
+     桌面端尺寸不变。覆盖：导航链接 / 三餐标签 / 日历月份切换按钮 */
+  .tag {
+    padding: 12px 18px;
+  }
+
+  .cal-nav {
+    padding: 12px 14px;
+  }
+
+  .streak-num {
+    font-size: 28px;   /* Day 14：原 32px，手机上再收一档 */
+  }
+
+  /* 健康分大字跟 streak 同档缩小；提示文案保持 14px 不改，保证能看清 */
+  .diet-score-num {
+    font-size: 28px;
+  }
+
+  .diet-score-hint {
+    font-size: 14px;
+  }
+
+  /* 手机上输入框占满整行，别挤在半边 */
+  .form-row input,
+  .form-row select,
+  .inline-row select,
+  .inline-row input {
+    max-width: 100%;
+  }
+
+  .inline-row input {
+    flex: 1;
+  }
+
+  /* 开屏页：小屏收紧标题和内边距，主按钮别撑破 */
+  .hero {
+    padding: 28px 18px 26px;
+  }
+
+  .hero-title {
+    font-size: 24px;
+  }
+
+  .btn-hero {
+    padding: 13px 28px;
+    font-size: 16px;
+  }
+
+  /* Day 10：手机端小字号统一提一档，避免 12/13/15px 混排显得忽大忽小。
+     桌面端字号完全不变；导航链接保持 13px，防止四项在 360px 下溢出换行 */
+  .hero-note,
+  .preview-hint {
+    font-size: 14px;
+  }
+
+  .preview-card-note,
+  .record-wd,
+  .record-meta {
+    font-size: 13px;
+  }
+
+  /* 开屏页：小屏收紧标题字号（插画宽度用 vw 公式自适应，无需另调） */
+  .splash-title {
+    font-size: 24px;
+  }
+
+  .skeleton-cards {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  /* 四张卡片在手机上排两列；列表行收紧一点间距，别太挤 */
+  .preview-cards {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .preview-card {
+    padding: 14px 12px;
+  }
+
+  .preview-card-value {
+    font-size: 20px;
+  }
+
+  .record-list {
+    padding: 4px 14px;
+  }
+
+  .record-row {
+    gap: 10px;
+  }
+}
+
+/* ---- 页脚提示 ---- */
+.page-footer {
+  text-align: center;
+  font-size: 13px;
+  color: var(--color-muted);
+  margin-top: 32px;
+}
+
+/* ---- 轻动效：卡片淡入（尊重系统减动效设置） ---- */
+@media (prefers-reduced-motion: no-preference) {
+  .card {
+    animation: card-in 0.35s ease both;
+  }
+  @keyframes card-in {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+}
+
+/* ============================================
+   检查台（check.html）专用样式 · 2026-10-06 新增
+   颜色一律走 :root 里的变量，不写死色值；
+   状态灯只用「灰=等待 / 绿=正常 / 红=失败」三色，不借用黄/淡绿那些语义色。
+   ============================================ */
+
+/* ---- 状态行 + 状态灯 ---- */
+.check-line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.check-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  flex: 0 0 auto;                 /* 不被 flex 压扁 */
+  background: var(--color-muted);
+}
+.check-dot-ok  { background: var(--color-green); }
+.check-dot-bad { background: var(--color-danger); }
+
+/* 等待中：呼吸灯。只在用户没关动效时才闪 */
+@media (prefers-reduced-motion: no-preference) {
+  .check-dot-load { animation: dot-pulse 1s ease-in-out infinite; }
+  @keyframes dot-pulse {
+    0%, 100% { opacity: 1; }
+    50%      { opacity: 0.35; }
+  }
+}
+
+/* ---- 数据表：窄屏横向滚动，不撑破 360px ---- */
+.table-scroll {
+  overflow-x: auto;
+  margin: 12px 0;
+  -webkit-overflow-scrolling: touch;
+}
+.data-table {
+  width: 100%;
+  min-width: 420px;              /* 窄屏时靠横向滚动，不硬挤列 */
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.data-table th,
+.data-table td {
+  padding: 8px 10px;
+  text-align: left;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--color-border);
+}
+.data-table th {
+  color: var(--color-muted);
+  font-weight: 600;
+}
+.data-table tr:last-child td { border-bottom: none; }
+
+/* ---- 空态 / 出错态（最容易漏的两档，必须有明确文案而不是空白） ---- */
+.check-empty {
+  font-size: 14px;
+  color: var(--color-muted);
+  background: var(--color-green-pale);
+  border-radius: var(--radius-sm);
+  padding: 14px 16px;
+}
+.check-empty a { color: var(--color-green); }
+.check-empty-bad {
+  background: transparent;
+  border: 1px solid var(--color-danger);
+  color: var(--color-danger);
+}
+
+/* ---- 危险按钮（检查台的「删除测试」用）：红描边，不跟主按钮抢视线 ----
+   语义色分工里红＝错误 / 危险。删除接口虽已改成软删除（数据留在库里、可用 A10 恢复），
+   但页面上没有恢复入口，对用户仍是危险操作，所以照样用红描边。
+   必须写在 .btn / .btn:hover / .btn:disabled 之后才能盖住它们（同为单类选择器，按源码顺序生效）。 */
+.btn-danger {
+  color: var(--color-danger);
+  background: transparent;
+  border: 1px solid var(--color-danger);
+}
+
+.btn-danger:hover {
+  color: #fff;
+  background: var(--color-danger);
+}
+
+.btn-danger:disabled:hover {
+  background: transparent;   /* 禁用态别再变红，明确"点了也没用" */
+}
+
+/* ---- 最后更新时间（余力加练，2026-10-06）：一行小结，不抢三张卡的视觉重心 ---- */
+.check-updated {
+  margin: 0 0 16px;
+  font-size: 14px;
+  color: var(--color-muted);
+}
+
+/* ---- 手机端：字号提一档，行高一点好点 ---- */
+@media (max-width: 480px) {
+  .data-table { font-size: 14px; }
+  .data-table th,
+  .data-table td { padding: 10px 12px; }
+  .check-line { font-size: 17px; }
+  .check-updated { font-size: 13px; }
+}
+

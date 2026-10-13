@@ -1,0 +1,276 @@
+/* ============================================
+   api-source.js —— 前端取数层（Day 17 新增，Day 18 加写接口）
+   ------------------------------------------------------------
+   干什么：
+   1. 读：页面打开时去云端的两个读接口取一次真实数据，取到后
+      交给 storage.js 的「云端覆盖层」，页面照旧从 dhlStorage 读数；
+   2. 写：打卡页保存时调 saveCheckin()，把这一天的记录 PUT 到云端
+      （A6 PUT /api/checkins/{date}，upsert 全量覆盖）；
+   3. 改 / 删（2026-10-07 新增）：patchCheckin() 只改指定的那几个字段（A8 PATCH），
+      其余列原样保留；deleteCheckin() 删掉某天的整条记录（A9 DELETE，**软删除**：
+      数据留在库里，接口层面可用 A10 POST /{date}/restore 恢复；但页面没有恢复入口）。
+      2026-10-07 时只有检查台 check.html 在用 deleteCheckin；
+      2026-10-12（Day 27）起，今日页和打卡页的「取消今天打卡」也走它了 ——
+      patchCheckin 至今仍只有检查台在用。
+
+   为什么要单独一层（而不是各页面各写一遍 fetch）：
+   1. storage.js 是全项目唯一的数据出入口（它自己的文件头就是这么写的），
+      把云端数据放在它底下，**所有页面自动都读到了真实数据**；
+   2. 两个接口并发只要发一次（load() 复用同一个 Promise）；
+   3. 取不到时**不白屏**：只打一条控制台警告，页面继续用本地数据渲染
+      （沿用 PRD E2「数据异常也不报错不白屏」的思路）。
+
+   接口契约：api-contract.md 4.3（A2 /api/settings）、4.5（A4 /api/checkins）、
+   4.7（A6 PUT /api/checkins/{date}）、4.9（A8 PATCH /api/checkins/{date}）、
+   4.10（A9 DELETE /api/checkins/{date}；软删除，A10 POST /{date}/restore 可恢复）。
+   字段已经是 camelCase，与页面直接对接，不需要再转换。
+
+   写入策略（Day 18 拍板，方案 A「云端优先 + 本地兜底」）：
+   先 PUT 云端，成功 → 只更新内存覆盖层（不碰 localStorage）；
+   失败 → 由 checkin.js 回落写本地，页面提示「已存本机」。
+   ============================================ */
+
+(function () {
+  'use strict';
+
+  // 线上接口地址（api-contract.md 2.1 的 API_BASE）
+  var API_BASE = 'https://daily-health-log-d3eej7197499a30-1499041418.ap-shanghai.app.tcloudbase.com';
+
+  var loading = null;  // 复用的 Promise：多个页面脚本同时 ready() 也只发一次请求
+  var result = null;   // 最近一次取数的结果，供页面/控制台查看
+
+  /**
+   * 把「技术错误」收敛成人话（Day 23 三类错误统一）。
+   *
+   * 为什么需要它：浏览器原生网络错误（断网时 fetch reject 的 "Failed to fetch"、
+   * 网关回 HTML 时 res.json() 抛的 "Unexpected token <"）都是英文技术话术，
+   * 直接给用户看等于没提示（他看不懂，也不知道该干嘛）。
+   * 规矩：**只有我们自己写的中文提示才原样透传**（比如接口 400/500 带回来的
+   * error.message），其余一律换成给定的人话兜底。
+   *
+   * @param {*} e 捕获到的错误（可能为空）
+   * @param {string} fallback 人话兜底（中文）
+   */
+  function humanMessage(e, fallback) {
+    var msg = (e && e.message) || '';
+    if (/[\u4e00-\u9fa5]/.test(msg)) return msg;
+    return fallback;
+  }
+
+  /**
+   * 取一个接口并剥掉 {ok,data} 外壳。
+   * 失败时抛错（由 load() 统一兜底），错误信息优先用契约里的中文 message。
+   */
+  function fetchJson(path) {
+    return fetch(API_BASE + path).then(function (res) {
+      return res.json().then(function (body) {
+        if (!res.ok || !body || body.ok !== true) {
+          var msg = (body && body.error && body.error.message) || ('HTTP ' + res.status);
+          throw new Error(msg);
+        }
+        return body.data;
+      });
+    });
+  }
+
+  /**
+   * A6 写接口：保存 / 覆盖某天的打卡记录（契约 4.7）。
+   *
+   * 与 fetchJson 的区别：写接口的失败要**交给页面显示红字**，不能让异常冒到
+   * Promise 外面去（页面只想拿到一个明确的结果对象），所以这里不用 fetchJson，
+   * 而是自己把成功/失败都收敛成 { ok, ... } 的形状。
+   *
+   * @param {string} date   日期 YYYY-MM-DD（路径参数，请求体里不带）
+   * @param {Object} record 单日记录（camelCase，字段同契约 3.2）
+   * @returns {Promise<{ok: true, isNew: boolean, record: Object} | {ok: false, message: string}>}
+   *   永远 resolve，调用方不需要写 catch。
+   */
+  function saveCheckin(date, record) {
+    // 契约 4.7：请求体不含 date（日期以路径为准）；带了必须与路径一致，否则 400。
+    // 这里直接把 date 剔掉，避免"路径与请求体不一致"这种低级 400。
+    var payload = {};
+    Object.keys(record || {}).forEach(function (k) {
+      if (k !== 'date') payload[k] = record[k];
+    });
+
+    return fetch(API_BASE + '/api/checkins/' + encodeURIComponent(date), {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    })
+      .then(function (res) {
+        return res.json().then(function (body) {
+          if (!res.ok || !body || body.ok !== true) {
+            var msg = (body && body.error && body.error.message) || ('保存失败（HTTP ' + res.status + '）');
+            return { ok: false, message: msg };
+          }
+          return { ok: true, isNew: body.data.isNew === true, record: body.data.record };
+        });
+      })
+      .catch(function (e) {
+        // 网络不通 / 响应不是 JSON —— 都当成"这次没存上"，由页面决定怎么提示。
+        // 用 humanMessage：浏览器原生的英文错误（Failed to fetch 等）不能给用户看。
+        return { ok: false, message: humanMessage(e, '网络不通，这次没存上') };
+      });
+  }
+
+  /**
+   * A8 局部修改接口：只改请求体里出现的字段（契约 4.9）。
+   *
+   * 与 saveCheckin 的关键区别（这也是 PATCH 存在的理由）：
+   *   saveCheckin 会把整条记录的 11 个字段一起写一遍，没填的会变成空值，
+   *   所以「只想改个体重」得先把整条读出来、改一格、再整条发回去；
+   *   patchCheckin 只写你给的那几列，数据库里其他列原样不动。
+   *   请求体越小越不容易误伤，多端各改各的字段时也不会互相覆盖。
+   *
+   * @param {string} date   日期 YYYY-MM-DD（路径参数；请求体里不带，带了必须与路径一致）
+   * @param {Object} fields 要改的字段（camelCase），至少要有一个，如 { weightKg: 66 }
+   * @returns {Promise<{ok: true, record: Object} | {ok: false, message: string}>}
+   *   永远 resolve，调用方不需要写 catch（与 saveCheckin 同一约定）。
+   */
+  function patchCheckin(date, fields) {
+    // 契约 4.9：日期以路径为准；顺手把 date 剔掉，避免「路径与请求体不一致」的 400
+    var payload = {};
+    Object.keys(fields || {}).forEach(function (k) {
+      if (k !== 'date') payload[k] = fields[k];
+    });
+
+    return fetch(API_BASE + '/api/checkins/' + encodeURIComponent(date), {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    })
+      .then(function (res) {
+        return res.json().then(function (body) {
+          if (!res.ok || !body || body.ok !== true) {
+            var msg = (body && body.error && body.error.message) || ('修改失败（HTTP ' + res.status + '）');
+            return { ok: false, message: msg };
+          }
+          return { ok: true, record: body.data.record };
+        });
+      })
+      .catch(function (e) {
+        return { ok: false, message: humanMessage(e, '网络不通，这次没改成') };
+      });
+  }
+
+  /**
+   * A9 删除接口：删掉某一天的整条记录（契约 4.10）。
+   *
+   * 接口层是**软删除**（2026-10-07 起，契约 4.11）：数据留在库里，可用 A10 恢复。
+   * 但**页面没有恢复入口**，所以对用户而言仍是「删了就没了」——调用方调它之前
+   * 必须先弹二次确认（检查台的删除按钮就是这么做的）。
+   * 成功时接口只回 { date, deleted: true }，不回被删掉的内容（删了就当它没了）。
+   *
+   * @param {string} date 日期 YYYY-MM-DD（路径参数）
+   * @returns {Promise<{ok: true, date: string} | {ok: false, message: string}>}
+   *   永远 resolve，调用方不需要写 catch（与 saveCheckin 同一约定）。
+   */
+  function deleteCheckin(date) {
+    return fetch(API_BASE + '/api/checkins/' + encodeURIComponent(date), {
+      method: 'DELETE'
+    })
+      .then(function (res) {
+        return res.json().then(function (body) {
+          if (!res.ok || !body || body.ok !== true) {
+            var msg = (body && body.error && body.error.message) || ('删除失败（HTTP ' + res.status + '）');
+            return { ok: false, message: msg };
+          }
+          return { ok: true, date: body.data.date };
+        });
+      })
+      .catch(function (e) {
+        return { ok: false, message: humanMessage(e, '网络不通，这次没删掉') };
+      });
+  }
+
+  /**
+   * A3 写接口：保存 / 修改目标设置（契约 4.3，upsert；startDate 首次创建时
+   * 由服务端取「当天」，前端不用传）。
+   *
+   * 为什么 2026-10-11 才补上它：A3 上线时前端从没接过 —— 表单保存一直只写
+   * localStorage（Day 14 的老逻辑）。库里一直有 seed 建的 settings 行，
+   * 所以「设置表单 + 云端写入」这条路在线上从未真正走过；Day 27 试前清空
+   * 数据库后，真人第一次踩进这个洞：保存只进了本机，一刷新云端仍是 null，
+   * 表单又回来 —— 试用者原话「我陷入了死循环」。
+   *
+   * 失败处理与 saveCheckin 同一约定：收敛成 { ok:false, message }，永不 reject。
+   *
+   * @param {Object} settings { goalExerciseMinutes, goalWaterMl }（camelCase）
+   * @returns {Promise<{ok: true, settings: Object} | {ok: false, message: string}>}
+   */
+  function saveSettings(settings) {
+    return fetch(API_BASE + '/api/settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(settings || {})
+    })
+      .then(function (res) {
+        return res.json().then(function (body) {
+          if (!res.ok || !body || body.ok !== true) {
+            var msg = (body && body.error && body.error.message) || ('保存失败（HTTP ' + res.status + '）');
+            return { ok: false, message: msg };
+          }
+          return { ok: true, settings: body.data.settings };
+        });
+      })
+      .catch(function (e) {
+        return { ok: false, message: humanMessage(e, '网络不通，目标没存上') };
+      });
+  }
+
+  /**
+   * 取云端数据（只取一次）。
+   * @returns {Promise<{ok: boolean, count?: number, reason?: string}>}
+   *   永远 resolve，不 reject —— 调用方不需要写 catch。
+   */
+  function load() {
+    if (loading) return loading;
+
+    loading = Promise.all([
+      fetchJson('/api/settings'),
+      fetchJson('/api/checkins?limit=400')  // 契约 4.5：一次最多 400 天，够单人一年
+    ])
+      .then(function (both) {
+        var settings = both[0].settings;   // 可能是 null（没设置过目标）
+        var items = both[1].items || [];
+
+        // A4 返回的是数组，而页面要的是「以日期为 key 的对象」（沿用本地存储的形状）
+        var records = {};
+        items.forEach(function (item) {
+          if (item && item.date) records[item.date] = item;
+        });
+
+        window.dhlStorage.applyRemote(settings, records);
+        result = { ok: true, count: items.length };
+        return result;
+      })
+      .catch(function (e) {
+        // 控制台里留原始英文错误（开发排查用），给页面/日志的 reason 换成人话
+        console.warn('[api-source] 云端数据取不到，本次用本地数据渲染：', e && e.message);
+        result = { ok: false, reason: humanMessage(e, '网络不通，这次没取到云端数据') };
+        return result;
+      });
+
+    return loading;
+  }
+
+  /**
+   * 页面启动入口：数据取完（不管成功失败）再跑 callback。
+   * 页面脚本把结尾的 init() 换成 dhlApi.ready(init) 即可，内部逻辑一行不用改。
+   */
+  function ready(callback) {
+    load().then(callback);
+  }
+
+  window.dhlApi = {
+    API_BASE: API_BASE,
+    load: load,
+    ready: ready,
+    saveCheckin: saveCheckin,
+    saveSettings: saveSettings,
+    patchCheckin: patchCheckin,
+    deleteCheckin: deleteCheckin,
+    getResult: function () { return result; }
+  };
+})();

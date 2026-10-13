@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>历史记录 · Daily-Health-Log</title>
+<link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+
+<div class="container">
+
+  <!-- 顶部导航：四页共用结构，当前页链接加 class="active" -->
+  <header class="site-header">
+    <div class="site-title">每日健康打卡</div>
+    <nav class="site-nav">
+      <a href="welcome.html">首页</a>
+      <a href="index.html">今日</a>
+      <a href="history.html" class="active">历史记录</a>
+      <a href="trends.html">趋势</a>
+    </nav>
+  </header>
+
+  <main>
+    <!-- 打卡日历（PRD F3 / E8）：可切换上/下月，未来日期不可点。
+         卡内首行放三个统计数字（Day 14 收尾：原独立统计卡并进来，少一张卡的高度；
+         三个 id 一律没变，history.js 的 renderStats() 一行都不用改） -->
+    <section class="card">
+      <p class="cal-stats">
+        <span>连续 <strong id="stat-streak">0</strong> 天</span>
+        <span class="cal-stats-sep" aria-hidden="true">·</span>
+        <span>最长 <strong id="stat-longest">0</strong> 天</span>
+        <span class="cal-stats-sep" aria-hidden="true">·</span>
+        <span>坚持率 <strong id="stat-rate">—</strong></span>
+      </p>
+      <div class="cal-header">
+        <button type="button" class="btn btn-ghost cal-nav" id="btn-prev-month">← 上个月</button>
+        <h2 class="card-title" id="cal-title"></h2>
+        <button type="button" class="btn btn-ghost cal-nav" id="btn-next-month">下个月 →</button>
+      </div>
+      <div class="calendar-weekdays">
+        <span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span>
+      </div>
+      <div class="calendar-grid" id="calendar-grid"></div>
+      <p class="cal-hint" id="cal-hint">绿色是打过卡的日子，点一下看当天详情。</p>
+    </section>
+
+    <!-- Day 12：按饮食标签筛选（frontend-guidelines skill 首次实战）
+         三态：有结果=列出日期行 / 无结果=空态提示 / 清空=点「全部」恢复默认 -->
+    <section class="card">
+      <h2 class="card-title">按饮食标签翻记录</h2>
+      <div class="tag-group filter-tags" id="meal-tag-filter" role="group" aria-label="按饮食标签筛选">
+        <button type="button" class="tag active" data-tag="">全部</button>
+        <button type="button" class="tag" data-tag="健康">🥗 健康</button>
+        <button type="button" class="tag" data-tag="普通">🍚 普通</button>
+        <button type="button" class="tag" data-tag="放纵">🍔 放纵</button>
+      </div>
+      <div id="filter-result">
+        <p class="filter-hint">点上面的标签，翻出那天的记录。</p>
+      </div>
+    </section>
+
+    <!-- 单日详情：点日历上有标记的日子出现（PRD F3 / 验收 A7）
+         Day 13：补「返回日历」按钮，两级视图进出有来有回 -->
+    <section class="card" id="detail-card" hidden>
+      <h2 class="card-title" id="detail-title"></h2>
+      <div id="detail-body"></div>
+      <button type="button" class="btn btn-ghost" id="btn-back-cal" hidden>← 返回日历</button>
+    </section>
+  </main>
+
+  <footer class="page-footer">记录同步到云端；云端连不上时会先存在本机。</footer>
+
+</div>
+
+<script src="assets/js/storage.js"></script>
+<script src="assets/js/api-source.js"></script>
+<script src="assets/js/stats.js"></script>
+<script src="assets/js/state.js"></script>
+<script src="assets/js/history.js"></script>
+
+</body>
+</html>

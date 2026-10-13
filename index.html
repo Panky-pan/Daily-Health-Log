@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>今日打卡 · Daily-Health-Log</title>
+<link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+
+<div class="container">
+
+  <!-- 顶部导航：四页共用结构，当前页链接加 class="active" -->
+  <header class="site-header">
+    <div class="site-title">每日健康打卡</div>
+    <nav class="site-nav">
+      <a href="welcome.html">首页</a>
+      <a href="index.html" class="active">今日</a>
+      <a href="history.html">历史记录</a>
+      <a href="trends.html">趋势</a>
+    </nav>
+  </header>
+
+  <main>
+    <!-- 目标设置表单：首次打开（没存过设置）时显示，PRD F1 -->
+    <section class="card" id="settings-card" hidden>
+      <h2 class="card-title">先设个小目标</h2>
+      <p class="card-hint">第一次来？定下每天的运动和饮水目标，之后随时能改。</p>
+      <form id="settings-form" novalidate>
+        <div class="form-row">
+          <label for="goal-exercise">每天运动多少分钟</label>
+          <input type="number" id="goal-exercise" min="1" max="600" step="1" placeholder="比如 30" required>
+          <p class="field-error" id="goal-exercise-error" hidden></p>
+        </div>
+        <div class="form-row">
+          <label for="goal-water">每天喝多少水（ml）</label>
+          <input type="number" id="goal-water" min="1" max="10000" step="1" placeholder="比如 2000" required>
+          <p class="field-error" id="goal-water-error" hidden></p>
+        </div>
+        <p class="field-error" id="settings-save-error" hidden></p>
+        <button type="submit" class="btn">保存目标</button>
+      </form>
+    </section>
+
+    <!-- 已设目标展示 + 目标提醒条（PRD F5）：Day 14 起提醒条并进这张卡，
+         不再单独占一块（少一层滑动，且"差多少"和"目标是什么"本来就该在一起） -->
+    <section class="card" id="goal-card" hidden>
+      <h2 class="card-title">今日目标</h2>
+      <p id="goal-text" class="goal-text"></p>
+      <p class="reminder reminder-in-card" id="reminder-bar" hidden></p>
+      <button type="button" class="btn btn-ghost" id="btn-change-goal">改目标</button>
+    </section>
+
+    <!-- 打卡入口卡（Day 14）：本页不再放表单，只报"今天记了没" + 一条去打卡的路。
+         表单搬到了 checkin.html，记完自动回本页。
+         Day 27：补上「取消今天打卡」—— 后端 A9 删除接口早就有，前端一直没入口，
+         试用者卡在"怎么把记录取消掉"这一步（页面上无处可点）。按钮只在今天
+         已经记过时出现，由 today.js 控制显示。 -->
+    <section class="card" id="checkin-entry-card" hidden>
+      <h2 class="card-title">今日打卡</h2>
+      <p class="card-hint" id="checkin-entry-hint"></p>
+      <div class="card-actions">
+        <a class="btn" href="checkin.html" id="checkin-entry-btn">去打卡</a>
+        <button type="button" class="btn btn-danger" id="btn-delete-checkin" hidden>取消今天打卡</button>
+      </div>
+      <p class="field-error" id="delete-checkin-error" hidden></p>
+      <p class="checkin-status" id="delete-checkin-status" hidden></p>
+    </section>
+
+    <!-- streak 大字区（第 4 步）：连续打卡天数 + 历史最长 -->
+    <section class="card streak-card" id="streak-card">
+      <div class="streak-item">
+        <span class="streak-num" id="streak-current">0</span>
+        <span class="streak-label">连续打卡（天）</span>
+      </div>
+      <div class="streak-item">
+        <span class="streak-num" id="streak-longest">0</span>
+        <span class="streak-label">历史最长（天）</span>
+      </div>
+    </section>
+
+    <!-- 今日饮食健康分（PRD 6.4，2026-09-29）：按三餐标签实时算出，不存进 localStorage -->
+    <section class="card diet-card" id="diet-card" hidden>
+      <h2 class="card-title">今日饮食健康分</h2>
+      <p class="diet-score">
+        <span class="diet-score-num" id="diet-score-num">—</span><span class="diet-score-max" id="diet-score-max">/ 6 分</span>
+      </p>
+      <p class="diet-score-hint" id="diet-score-hint"></p>
+    </section>
+  </main>
+
+  <footer class="page-footer">记录同步到云端；云端连不上时会先存在本机。</footer>
+
+</div>
+
+<!-- 本页只用得上这三个：表单相关的 calories.js / validate.js 已随表单一起搬去 checkin.html -->
+<script src="assets/js/storage.js"></script>
+<script src="assets/js/api-source.js"></script>
+<script src="assets/js/stats.js"></script>
+<script src="assets/js/today.js"></script>
+
+</body>
+</html>
